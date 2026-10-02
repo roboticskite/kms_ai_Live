@@ -33,6 +33,7 @@ interface EditorState {
   addCostume: (spriteId: string, name: string, dataUrl: string, width: number, height: number) => void;
   addBackdrop: (name: string, dataUrl: string) => void;
   setBackdrop: (index: number) => void;
+  deleteBackdrop: (index: number) => void;
   addVariable: (name: string, spriteScoped?: boolean, spriteId?: string) => void;
   deleteVariable: (id: string) => void;
   toggleVariableVisible: (id: string) => void;
@@ -277,7 +278,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setBackdrop: (index) => {
     const project = get().project;
+    if (index < 0 || index >= project.backdrops.length) return;
     const updated = { ...project, currentBackdrop: index, updatedAt: Date.now() };
+    saveCurrent(updated);
+    set({ project: updated });
+  },
+
+  deleteBackdrop: (index) => {
+    const project = get().project;
+    if (project.backdrops.length <= 1 || index < 0 || index >= project.backdrops.length) return;
+    const backdrops = project.backdrops.filter((_, backdropIndex) => backdropIndex !== index);
+    const currentBackdrop =
+      index < project.currentBackdrop
+        ? project.currentBackdrop - 1
+        : index === project.currentBackdrop
+          ? Math.min(index, backdrops.length - 1)
+          : project.currentBackdrop;
+    const updated = { ...project, backdrops, currentBackdrop, updatedAt: Date.now() };
     saveCurrent(updated);
     set({ project: updated });
   },

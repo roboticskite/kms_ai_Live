@@ -228,3 +228,16 @@ export function buildBeginnerToolboxJson(): any {
   }
   return obj;
 }
+
+export function buildSingleCategoryToolbox(categoryName: string, beginnerMode: boolean = false): any {
+  let cat = TOOLBOX_CATEGORIES.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
+
+  if (!cat) {
+    cat = TOOLBOX_CATEGORIES[0];
+  }
+
+  return {
+    kind: "flyoutToolbox",
+    contents: cat.blocks.map(b => ({ kind: "block", type: b.type }))
+  };
+}

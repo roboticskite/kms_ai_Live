@@ -46,6 +46,28 @@
   .category-pill {
     @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 text-white;
   }
+  .category-icon-btn {
+    @apply flex items-center justify-center rounded-full cursor-pointer mb-0.5;
+    width: 44px;
+    height: 44px;
+    transition: all 0.18s cubic-bezier(.4,0,.2,1);
+  }
+  .category-icon-btn:hover {
+    filter: brightness(1.1);
+    transform: scale(1.1);
+  }
+  .category-icon-btn:active {
+    transform: scale(0.95);
+  }
+  .category-label {
+    font-size: 10px;
+    font-weight: 500;
+    text-align: center;
+    line-height: 1.2;
+    margin-bottom: 4px;
+    user-select: none;
+    font-family: 'Inter', sans-serif;
+  }
   .tooltip {
     @apply absolute z-50 px-3 py-2 rounded-lg bg-gray-900 text-white text-xs font-medium shadow-lg pointer-events-none opacity-0 transition-opacity duration-200;
   }
@@ -65,38 +87,53 @@
   }
 }
 
-/* Blockly theme overrides */
+/* Blockly theme overrides - hide native toolbox div, keep flyout functional */
+.workspace-shell {
+  background: #f8fafc;
+  transition: background 0.2s ease;
+}
+
+.workspace-shell[data-theme="dark"] {
+  background: #0f172a;
+}
+
+.workspace-shell[data-theme="dark"] .blocklySvg {
+  background: #0f172a !important;
+}
+
+.workspace-shell[data-theme="dark"] .blocklyMainBackground {
+  fill: #0f172a !important;
+}
+
+.workspace-shell[data-theme="dark"] .blocklyFlyoutBackground {
+  fill: #1f2937 !important;
+}
+
 .blocklyToolboxDiv {
-  background: #f8fafc !important;
-  border-right: 1px solid #e2e8f0 !important;
-  padding: 8px !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  border: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  position: absolute !important;
 }
-.blocklyTreeRow {
-  border-radius: 8px !important;
-  margin-bottom: 4px !important;
-  padding: 6px 8px !important;
-  height: auto !important;
-  line-height: 1.4 !important;
-  transition: all 0.15s ease !important;
-}
-.blocklyTreeRow:hover {
-  background: #e2e8f0 !important;
-}
-.blocklyTreeSelected {
-  background: #dbeafe !important;
-}
-.blocklyTreeLabel {
-  font-family: "Inter", sans-serif !important;
-  font-weight: 600 !important;
-  font-size: 13px !important;
-}
+
 .blocklyFlyoutBackground {
   fill: #f1f5f9 !important;
-  fill-opacity: 0.95 !important;
+  fill-opacity: 1 !important;
 }
 .blocklyMainBackground {
   stroke: none !important;
 }
 .blocklyWsDrag {
   cursor: grab;
+}
+/* Ensure flyout scrollbar is always visible */
+.blocklyFlyoutScrollbar,
+.blocklyFlyoutScrollbar .blocklyScrollbarBackground,
+.blocklyFlyoutScrollbar .blocklyScrollbarHandle {
+  display: block !important;
+  visibility: visible !important;
 }

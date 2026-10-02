@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import * as Blockly from "blockly";
+import { Home, Minus, Palette, Plus, Search, Trash2, Eye, EyeOff, X, Variable as VarIcon } from "lucide-react";
 import { useEditorStore } from "./store/editorStore";
 import { RuntimeEngine } from "./engine/runtime";
 import { initializeRuntimeState } from "./engine/spriteState";
@@ -14,12 +15,15 @@ import GalleryPanel from "./components/GalleryPanel";
 import TeacherDashboard from "./components/TeacherDashboard";
 import SettingsPanel from "./components/SettingsPanel";
 import HelpPanel from "./components/HelpPanel";
-import { Search, Plus, Trash2, Eye, EyeOff, Variable as VarIcon } from "lucide-react";
+import CategorySidebar from "./components/CategorySidebar";
 import type { RuntimeSpriteState } from "./types";
 
 export default function App() {
   const blocklyRef = useRef<BlocklyWorkspaceHandle>(null);
   const engineRef = useRef<RuntimeEngine | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>("Motion");
+  const [workspaceTheme, setWorkspaceTheme] = useState<"default" | "dark">("default");
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [runtimeState, setRuntimeState] = useState(() => {
     const project = useEditorStore.getState().project;
     const state = initializeRuntimeState(project);
@@ -34,7 +38,7 @@ export default function App() {
       asking: null as string | null,
     };
   });
-  const [stageSize, setStageSize] = useState({ width: 480, height: 360 });
+  const stageSize = { width: 480, height: 360 };
   const [showVarPanel, setShowVarPanel] = useState(false);
   const [newVarName, setNewVarName] = useState("");
 
@@ -49,6 +53,7 @@ export default function App() {
     showSettings,
     showHelp,
     fullscreen,
+    toggleFullscreen,
     searchQuery,
     setSearchQuery,
     setRunning,
@@ -109,6 +114,10 @@ export default function App() {
   // Keyboard handling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && useEditorStore.getState().fullscreen) {
+        useEditorStore.getState().toggleFullscreen();
+        return;
+      }
       if (engineRef.current) {
         engineRef.current.handleKeyDown(e.key);
         // Also trigger key-pressed scripts
@@ -157,6 +166,18 @@ export default function App() {
     engineRef.current?.handleMouseUp();
   }, []);
 
+  const handleZoomIn = useCallback(() => {
+    blocklyRef.current?.zoomIn();
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    blocklyRef.current?.zoomOut();
+  }, []);
+
+  const handleResetView = useCallback(() => {
+    blocklyRef.current?.center();
+  }, []);
+
   const visibleVariables = project.variables
     .filter((v) => v.visible)
     .map((v) => ({ name: v.name, value: runtimeState.variables[v.name] ?? v.value }));
@@ -178,13 +199,14 @@ export default function App() {
       />
 
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Left panel - Blockly toolbox and workspace */}
+        {/* Left panel - Category sidebar + Blockly workspace */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Search bar */}
+          {/* Top bar: search + variables */}
           <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-200 shrink-0">
             <div className="relative flex-1 max-w-xs">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
+                id="blocks-search-input"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search blocks..."
@@ -244,39 +266,116 @@ export default function App() {
             </div>
           )}
 
-          {/* Blockly workspace */}
-          <div className="flex-1 min-h-0 relative">
-            <BlocklyWorkspace
-              ref={blocklyRef}
-              beginnerMode={isBeginnerMode}
+          {/* Blockly workspace + custom sidebar */}
+          <div className="flex-1 min-h-0 flex relative">
+            {/* Custom category sidebar */}
+            <CategorySidebar
+              activeCategory={activeCategory}
+              onSelectCategory={(name) => {
+                setActiveCategory(name);
+                // Let Blockly render first, then open category
+                setTimeout(() => {
+                  blocklyRef.current?.selectCategory(name);
+                }, 50);
+              }}
               searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
             />
+            {/* Blockly workspace */}
+            <div className="flex-1 min-h-0 relative workspace-shell" data-theme={workspaceTheme}>
+              <div className="absolute right-4 top-4 z-20 flex flex-col items-center gap-2 rounded-full border border-gray-200 bg-white/90 p-1.5 shadow-lg backdrop-blur-sm">
+                <button className="btn-ghost h-8 w-8 rounded-full p-0" onClick={handleResetView} title="Reset view">
+                  <Home size={16} />
+                </button>
+                <button className="btn-ghost h-8 w-8 rounded-full p-0" onClick={handleZoomIn} title="Zoom in">
+                  <Plus size={16} />
+                </button>
+                <button className="btn-ghost h-8 w-8 rounded-full p-0" onClick={handleZoomOut} title="Zoom out">
+                  <Minus size={16} />
+                </button>
+
+                <div className="relative">
+                  <button
+                    className="btn-ghost h-8 w-8 rounded-full p-0"
+                    onClick={() => setThemeMenuOpen((v) => !v)}
+                    title="Workspace theme"
+                    style={{
+                      background: workspaceTheme === "dark" ? "#111827" : "#7c3aed",
+                      color: "white",
+                    }}
+                  >
+                    <Palette size={15} />
+                  </button>
+
+                  {themeMenuOpen && (
+                    <div className="absolute right-0 top-10 w-28 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
+                      <button
+                        className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-gray-100"
+                        onClick={() => {
+                          setWorkspaceTheme("default");
+                          setThemeMenuOpen(false);
+                        }}
+                      >
+                        Default
+                      </button>
+                      <button
+                        className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-gray-100"
+                        onClick={() => {
+                          setWorkspaceTheme("dark");
+                          setThemeMenuOpen(false);
+                        }}
+                      >
+                        Dark
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <BlocklyWorkspace
+                ref={blocklyRef}
+                beginnerMode={isBeginnerMode}
+                searchQuery={searchQuery}
+                activeCategory={activeCategory || "Motion"}
+                onCategoryChange={(name) => setActiveCategory(name)}
+              />
+            </div>
           </div>
         </div>
 
         {/* Right panel - Stage */}
-        <div className={`flex flex-col bg-white border-l border-gray-200 shrink-0 ${fullscreen ? "fixed inset-0 z-50" : ""}`} style={{ width: fullscreen ? "100%" : "min(520px, 40vw)" }}>
-          <StagePanel
-            onRun={handleRun}
-            onStop={handleStop}
-            onRestart={handleRestart}
-            stageSize={stageSize}
-            setStageSize={setStageSize}
-          />
-          <div className="flex-1 flex items-center justify-center bg-gray-100 p-3 min-h-0 overflow-hidden">
+        <div className={`flex flex-col bg-white border-l border-gray-200 shrink-0 ${fullscreen ? "fixed inset-0 z-50 bg-black" : ""}`} style={{ width: fullscreen ? "100%" : "min(560px, 42vw)" }}>
+          <div className={`relative flex-1 flex items-center justify-center ${fullscreen ? "min-h-0 bg-black p-0" : "min-h-0 overflow-hidden bg-gray-100 p-3"}`}>
             <StageCanvas
               project={project}
-              runtimeState={runtimeState}
+              runtimeState={isRunning ? runtimeState : { ...runtimeState, backdrop: project.currentBackdrop }}
               onSpriteClick={handleSpriteClick}
               onMouseMove={handleMouseMove}
               onMouseDown={handleMouseDown}
               onMouseUp={handleMouseUp}
-              fullscreen={false}
+              fullscreen={fullscreen}
               stageSize={stageSize}
               visibleVariables={visibleVariables}
             />
+            {fullscreen && (
+              <button
+                className="absolute right-5 top-5 z-[60] flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-700 shadow-lg hover:bg-gray-100"
+                onClick={toggleFullscreen}
+                title="Exit fullscreen"
+                aria-label="Exit fullscreen"
+              >
+                <X size={20} />
+              </button>
+            )}
           </div>
-          <SpritePanel />
+          {!fullscreen && (
+            <div className="flex h-52 shrink-0 min-h-0 border-t border-gray-200">
+              <div className="flex-1 min-w-0">
+                <SpritePanel />
+              </div>
+              <StagePanel />
+            </div>
+          )}
         </div>
 
         {/* AI Panel */}

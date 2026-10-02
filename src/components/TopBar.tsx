@@ -18,8 +18,6 @@ import {
   Images,
   Users,
   Menu,
-  ZoomIn,
-  ZoomOut,
   RotateCcw,
 } from "lucide-react";
 import { useEditorStore } from "../store/editorStore";
@@ -55,8 +53,6 @@ export default function TopBar({ onRun, onStop, onRestart, blocklyRef }: Props) 
     showGallery,
     toggleTeacherDashboard,
     showTeacherDashboard,
-    zoom,
-    setZoom,
     pushUndo,
   } = useEditorStore();
 
@@ -182,16 +178,6 @@ export default function TopBar({ onRun, onStop, onRestart, blocklyRef }: Props) 
           title="Redo"
         >
           <Redo2 size={18} />
-        </button>
-
-        <div className="w-px h-6 bg-gray-200 mx-1" />
-
-        <button className="btn-ghost" onClick={() => blocklyRef.current?.zoomIn()} title="Zoom in">
-          <ZoomIn size={18} />
-        </button>
-        <span className="text-xs text-gray-500 font-medium w-10 text-center">{zoom}%</span>
-        <button className="btn-ghost" onClick={() => blocklyRef.current?.zoomOut()} title="Zoom out">
-          <ZoomOut size={18} />
         </button>
 
         <div className="w-px h-6 bg-gray-200 mx-1" />

@@ -214,8 +214,8 @@ export default function StageCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
 
     // Check which sprite was clicked (reverse order - top sprites first)
     const allSprites: RuntimeSpriteState[] = [
@@ -243,13 +243,19 @@ export default function StageCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left - canvas.width / 2;
-    const y = canvas.height / 2 - (e.clientY - rect.top);
+    const x = (e.clientX - rect.left) * (canvas.width / rect.width) - canvas.width / 2;
+    const y = canvas.height / 2 - (e.clientY - rect.top) * (canvas.height / rect.height);
     onMouseMove(x, y);
   };
 
   return (
-    <div className={`relative bg-gray-900 rounded-lg overflow-hidden ${fullscreen ? "fixed inset-0 z-50" : ""}`}>
+    <div
+      className={`relative overflow-hidden bg-gray-900 ${fullscreen ? "" : "rounded-lg"}`}
+      style={fullscreen ? {
+        width: `min(100vw, ${(stageSize.width / stageSize.height) * 100}vh)`,
+        aspectRatio: `${stageSize.width} / ${stageSize.height}`,
+      } : undefined}
+    >
       <canvas
         ref={canvasRef}
         width={stageSize.width}
