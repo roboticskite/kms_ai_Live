@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import type { RuntimeSpriteState, ProjectData } from "../types";
 
 interface Props {
@@ -20,6 +20,8 @@ interface Props {
   fullscreen: boolean;
   stageSize: { width: number; height: number };
   visibleVariables: { name: string; value: any }[];
+  onMountPenCanvas?: (canvas: HTMLCanvasElement) => void;
+  onAnswerSubmit?: (answer: string) => void;
 }
 
 export default function StageCanvas({
@@ -32,11 +34,14 @@ export default function StageCanvas({
   fullscreen,
   stageSize,
   visibleVariables,
+  onMountPenCanvas,
+  onAnswerSubmit,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const penCanvasRef = useRef<HTMLCanvasElement>(null);
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const backdropCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const [answerInput, setAnswerInput] = useState("");
 
   const loadImage = useCallback((dataUrl: string, cache: Map<string, HTMLImageElement>): HTMLImageElement => {
     if (cache.has(dataUrl)) return cache.get(dataUrl)!;
@@ -99,27 +104,22 @@ export default function StageCanvas({
       const drawW = (costume.width || img.naturalWidth) * scale;
       const drawH = (costume.height || img.naturalHeight) * scale;
 
-      // Convert stage coords to canvas coords
-      // Stage: center is (0,0), x range: -240 to 240, y range: -180 to 180
       const canvasX = sprite.x + W / 2;
       const canvasY = H / 2 - sprite.y;
 
       ctx.save();
       ctx.translate(canvasX, canvasY);
 
-      // Apply rotation
       if (sprite.rotationStyle === "all-around") {
         ctx.rotate(((sprite.direction - 90) * Math.PI) / 180);
       } else if (sprite.rotationStyle === "left-right" && sprite.direction < 0) {
         ctx.scale(-1, 1);
       }
 
-      // Apply ghost effect
       if (sprite.effects.ghost > 0) {
         ctx.globalAlpha = Math.max(0, 1 - sprite.effects.ghost / 100);
       }
 
-      // Apply color filter
       if (sprite.effects.color !== 0) {
         ctx.filter = `hue-rotate(${sprite.effects.color * 3.6}deg)`;
       }
@@ -149,51 +149,38 @@ export default function StageCanvas({
     let varY = 20;
     for (const v of visibleVariables) {
       const text = `${v.name}: ${v.value}`;
-      ctx.font = "13px Inter, sans-serif";
+      ctx.font = "bold 13px Inter, sans-serif";
       const metrics = ctx.measureText(text);
-      const padding = 8;
+      const padding = 10;
       const boxW = metrics.width + padding * 2;
-      const boxH = 24;
-      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      const boxH = 26;
+      ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
       ctx.beginPath();
       ctx.roundRect(10, varY, boxW, boxH, 6);
       ctx.fill();
       ctx.fillStyle = "#fff";
-      ctx.fillText(text, 10 + padding, varY + 16);
-      varY += 30;
+      ctx.fillText(text, 10 + padding, varY + 18);
+      varY += 32;
     }
 
     // Draw game over / level complete overlay
     if (runtimeState.gameOver) {
-      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillStyle = "rgba(0,0,0,0.75)";
       ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = "#ff4444";
-      ctx.font = "bold 48px Inter, sans-serif";
+      ctx.fillStyle = "#ef4444";
+      ctx.font = "bold 44px Inter, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("Game Over", W / 2, H / 2);
       ctx.textAlign = "left";
     }
     if (runtimeState.levelComplete) {
-      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillStyle = "rgba(0,0,0,0.75)";
       ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = "#4caf50";
-      ctx.font = "bold 48px Inter, sans-serif";
+      ctx.fillStyle = "#22c55e";
+      ctx.font = "bold 44px Inter, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("Level Complete!", W / 2, H / 2);
+      ctx.fillText("Level Complete! 🏆", W / 2, H / 2);
       ctx.textAlign = "left";
-    }
-
-    // Draw ask prompt
-    if (runtimeState.asking) {
-      ctx.fillStyle = "rgba(0,0,0,0.8)";
-      ctx.fillRect(20, H - 60, W - 40, 40);
-      ctx.fillStyle = "#fff";
-      ctx.font = "14px Inter, sans-serif";
-      ctx.fillText(runtimeState.asking, 30, H - 35);
-      ctx.fillStyle = "#3385fc";
-      ctx.fillRect(W - 100, H - 55, 60, 30);
-      ctx.fillStyle = "#fff";
-      ctx.fillText("Answer", W - 90, H - 35);
     }
   }, [project, runtimeState, loadImage, visibleVariables]);
 
@@ -201,14 +188,17 @@ export default function StageCanvas({
     draw();
   }, [draw, runtimeState]);
 
-  // Initialize pen canvas
+  // Initialize pen canvas & notify parent
   useEffect(() => {
     const penCanvas = penCanvasRef.current;
     if (penCanvas) {
       penCanvas.width = stageSize.width;
       penCanvas.height = stageSize.height;
+      if (onMountPenCanvas) {
+        onMountPenCanvas(penCanvas);
+      }
     }
-  }, [stageSize]);
+  }, [stageSize, onMountPenCanvas]);
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -217,7 +207,6 @@ export default function StageCanvas({
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
 
-    // Check which sprite was clicked (reverse order - top sprites first)
     const allSprites: RuntimeSpriteState[] = [
       ...Object.values(runtimeState.sprites),
       ...runtimeState.clones,
@@ -249,13 +238,7 @@ export default function StageCanvas({
   };
 
   return (
-    <div
-      className={`relative overflow-hidden bg-gray-900 ${fullscreen ? "" : "rounded-lg"}`}
-      style={fullscreen ? {
-        width: `min(100vw, ${(stageSize.width / stageSize.height) * 100}vh)`,
-        aspectRatio: `${stageSize.width} / ${stageSize.height}`,
-      } : undefined}
-    >
+    <div className={`relative flex items-center justify-center ${fullscreen ? "w-full h-full" : "w-full h-full"}`}>
       <canvas
         ref={canvasRef}
         width={stageSize.width}
@@ -264,8 +247,10 @@ export default function StageCanvas({
         onMouseMove={handleMouseMove}
         onMouseDown={onMouseDown}
         onMouseUp={onMouseUp}
-        className="w-full h-full"
-        style={{ imageRendering: "auto" }}
+        style={fullscreen ? undefined : { maxHeight: "270px", aspectRatio: `${stageSize.width}/${stageSize.height}` }}
+        className={`rounded-xl shadow-md border border-gray-200 bg-white cursor-pointer ${
+          fullscreen ? "max-h-full max-w-full object-contain" : "max-w-full h-auto object-contain"
+        }`}
       />
       <canvas
         ref={penCanvasRef}
@@ -273,6 +258,33 @@ export default function StageCanvas({
         height={stageSize.height}
         className="hidden"
       />
+
+      {/* Interactive Ask Prompt Overlay */}
+      {runtimeState.asking && (
+        <form
+          className="absolute bottom-4 left-4 right-4 z-40 flex items-center gap-2 rounded-xl border border-gray-200 bg-white/95 p-2 shadow-2xl backdrop-blur-md animate-slide-up"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (onAnswerSubmit) onAnswerSubmit(answerInput);
+            setAnswerInput("");
+          }}
+        >
+          <div className="shrink-0 text-xs font-bold text-gray-800 px-2 max-w-[200px] truncate">
+            {runtimeState.asking}
+          </div>
+          <input
+            autoFocus
+            type="text"
+            value={answerInput}
+            onChange={(e) => setAnswerInput(e.target.value)}
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-kite-500"
+            placeholder="Type your answer here..."
+          />
+          <button type="submit" className="btn-primary shrink-0 px-3 py-1.5 text-xs font-bold">
+            Submit
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -280,15 +292,15 @@ export default function StageCanvas({
 function drawSpeechBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string) {
   ctx.font = "13px Inter, sans-serif";
   const metrics = ctx.measureText(text);
-  const padding = 8;
+  const padding = 10;
   const w = metrics.width + padding * 2;
   const h = 28;
   const bx = x - w / 2;
   const by = y - h;
 
   ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.strokeStyle = "#ccc";
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = "#cbd5e1";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.roundRect(bx, by, w, h, 8);
   ctx.fill();
@@ -303,7 +315,7 @@ function drawSpeechBubble(ctx: CanvasRenderingContext2D, x: number, y: number, t
   ctx.fillStyle = "rgba(255,255,255,0.95)";
   ctx.fill();
 
-  ctx.fillStyle = "#333";
+  ctx.fillStyle = "#1e293b";
   ctx.textAlign = "center";
   ctx.fillText(text, x, by + 18);
   ctx.textAlign = "left";

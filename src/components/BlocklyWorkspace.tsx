@@ -1,7 +1,7 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import * as Blockly from "blockly";
 import { defineAllBlocks } from "../blocks/blockDefinitions";
-import { buildToolboxJson, buildBeginnerToolboxJson } from "../blocks/toolbox";
+import { buildToolboxJson, buildBeginnerToolboxJson, TOOLBOX_CATEGORIES } from "../blocks/toolbox";
 import { ContinuousToolbox, ContinuousFlyout, ContinuousMetrics } from "@blockly/continuous-toolbox";
 import { useEditorStore } from "../store/editorStore";
 
@@ -9,7 +9,18 @@ let blocksDefined = false;
 
 class FixedScaleContinuousFlyout extends ContinuousFlyout {
   getFlyoutScale() {
-    return 1;
+    return 0.78;
+  }
+
+  protected reflowInternal_() {
+    super.reflowInternal_();
+    (this as any).width_ = 220;
+    (this as any).position();
+    (this as any).targetWorkspace?.resizeContents();
+  }
+
+  getWidth() {
+    return 220;
   }
 }
 
@@ -24,6 +35,10 @@ export interface BlocklyWorkspaceHandle {
   zoomOut: () => void;
   center: () => void;
   selectCategory: (name: string) => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
 }
 
 // Default starter program loaded into workspace on first open
@@ -183,6 +198,29 @@ const BlocklyWorkspace = forwardRef<BlocklyWorkspaceHandle, Props>(({ beginnerMo
     };
   }, [beginnerMode]);
 
+  useEffect(() => {
+    if (!searchQuery?.trim() || !workspaceRef.current) return;
+    const q = searchQuery.toLowerCase().trim();
+    for (const cat of TOOLBOX_CATEGORIES) {
+      const match = cat.name.toLowerCase().includes(q) || cat.blocks.some((b) => b.type.toLowerCase().includes(q));
+      if (match) {
+        onCategoryChange?.(cat.name);
+        try {
+          const tb = (workspaceRef.current as any).getToolbox?.();
+          const items: any[] = tb?.getToolboxItems?.() ?? [];
+          for (const item of items) {
+            const n = item.getName?.() ?? item.name_ ?? item.toolboxItemDef_?.name ?? "";
+            if (n.toLowerCase() === cat.name.toLowerCase()) {
+              tb.setSelectedItem?.(item);
+              break;
+            }
+          }
+        } catch {}
+        break;
+      }
+    }
+  }, [searchQuery, onCategoryChange]);
+
   useImperativeHandle(ref, () => ({
     getWorkspace: () => workspaceRef.current,
     getXml: () => {
@@ -223,6 +261,22 @@ const BlocklyWorkspace = forwardRef<BlocklyWorkspaceHandle, Props>(({ beginnerMo
     center: () => {
       if (!workspaceRef.current) return;
       workspaceRef.current.scrollCenter();
+    },
+    undo: () => {
+      if (!workspaceRef.current) return;
+      workspaceRef.current.undo(false);
+    },
+    redo: () => {
+      if (!workspaceRef.current) return;
+      workspaceRef.current.undo(true);
+    },
+    canUndo: () => {
+      if (!workspaceRef.current) return false;
+      return ((workspaceRef.current as any).undoStack_?.length ?? 0) > 0;
+    },
+    canRedo: () => {
+      if (!workspaceRef.current) return false;
+      return ((workspaceRef.current as any).redoStack_?.length ?? 0) > 0;
     },
     selectCategory: (name: string) => {
       if (!workspaceRef.current) return;

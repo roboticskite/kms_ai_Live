@@ -167,3 +167,34 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
+
+export interface ClassItem {
+  id: string;
+  name: string;
+  studentsCount: number;
+  assignmentsCount: number;
+}
+
+export interface StudentItem {
+  id: string;
+  name: string;
+  className: string;
+  progress: number;
+  projects: number;
+}
+
+export interface AssignmentItem {
+  id: string;
+  title: string;
+  className: string;
+  due: string;
+  submitted: number;
+  total: number;
+}
+
+export interface ChallengeItem {
+  id: string;
+  title: string;
+  desc: string;
+  submissions: number;
+}

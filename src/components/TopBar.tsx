@@ -36,10 +36,6 @@ export default function TopBar({ onRun, onStop, onRestart, blocklyRef }: Props) 
     project,
     setProjectName,
     isRunning,
-    undo,
-    redo,
-    undoStack,
-    redoStack,
     toggleSettings,
     toggleHelp,
     toggleFullscreen,
@@ -53,7 +49,6 @@ export default function TopBar({ onRun, onStop, onRestart, blocklyRef }: Props) 
     showGallery,
     toggleTeacherDashboard,
     showTeacherDashboard,
-    pushUndo,
   } = useEditorStore();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -137,11 +132,8 @@ export default function TopBar({ onRun, onStop, onRestart, blocklyRef }: Props) 
                   <Upload size={16} /> Import Project
                 </button>
                 <button className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2" onClick={handleExport}>
-                  <Download size={16} /> Export Project
+                  <Download size={16} /> Export Project (.json)
                 </button>
-                <a href="/kite-robotics-github.zip" download className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2">
-                  <Download size={16} /> Download Source Code
-                </a>
                 <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
               </div>
             </>
@@ -164,17 +156,15 @@ export default function TopBar({ onRun, onStop, onRestart, blocklyRef }: Props) 
         {savedMsg && <span className="text-xs text-green-600 font-medium mr-2 animate-fade-in">{savedMsg}</span>}
 
         <button
-          className="btn-ghost disabled:opacity-40"
-          onClick={() => { pushUndo(); undo(); }}
-          disabled={undoStack.length === 0}
+          className="btn-ghost hover:bg-gray-100"
+          onClick={() => blocklyRef.current?.undo()}
           title="Undo"
         >
           <Undo2 size={18} />
         </button>
         <button
-          className="btn-ghost disabled:opacity-40"
-          onClick={redo}
-          disabled={redoStack.length === 0}
+          className="btn-ghost hover:bg-gray-100"
+          onClick={() => blocklyRef.current?.redo()}
           title="Redo"
         >
           <Redo2 size={18} />

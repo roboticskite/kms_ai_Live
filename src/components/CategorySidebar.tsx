@@ -1,4 +1,4 @@
-﻿import {
+import {
   Move,
   Eye,
   Volume2,
@@ -45,12 +45,16 @@ interface Props {
 export default function CategorySidebar({
   activeCategory,
   onSelectCategory,
+  searchQuery,
 }: Props) {
+  const q = searchQuery?.toLowerCase().trim() || "";
+
   return (
     <div
       style={{
-        width: 156,
-        minWidth: 156,
+        width: 150,
+        minWidth: 150,
+        maxWidth: 150,
         background: "#f8fafc",
         borderRight: "1px solid #e2e8f0",
         display: "flex",
@@ -65,6 +69,8 @@ export default function CategorySidebar({
     >
       {SIDEBAR_CATEGORIES.map((cat) => {
         const isActive = activeCategory === cat.name;
+        const matchesSearch = q && (cat.name.toLowerCase().includes(q) || cat.label.toLowerCase().includes(q));
+
         return (
           <button
             key={cat.name}
@@ -79,8 +85,8 @@ export default function CategorySidebar({
               border: "none",
               borderRadius: 0,
               cursor: "pointer",
-              background: isActive ? `${cat.color}18` : "transparent",
-              borderLeft: isActive ? `4px solid ${cat.color}` : "4px solid transparent",
+              background: isActive ? `${cat.color}18` : matchesSearch ? `${cat.color}12` : "transparent",
+              borderLeft: isActive ? `4px solid ${cat.color}` : matchesSearch ? `4px dashed ${cat.color}` : "4px solid transparent",
               transition: "all 0.15s ease",
               textAlign: "left",
               outline: "none",

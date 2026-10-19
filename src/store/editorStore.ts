@@ -1,6 +1,17 @@
 import { create } from "zustand";
-import type { ProjectData, SpriteData, BackdropData, Variable } from "../types";
-import { generateId, generateSpriteId, getBuiltinSprites, getBuiltinBackdrops, svgToCostume } from "../utils/helpers";
+import type { ProjectData, SpriteData, BackdropData, Variable, ClassItem, StudentItem, AssignmentItem, ChallengeItem } from "../types";
+import { generateId, generateSpriteId, getBuiltinSprites, getBuiltinBackdrops } from "../utils/helpers";
+import { EXAMPLE_PROJECTS } from "../utils/exampleProjects";
+
+export interface GalleryProjectItem {
+  id: string;
+  name: string;
+  creator: string;
+  thumbnail: string;
+  likes: number;
+  liked: boolean;
+  projectData: ProjectData;
+}
 
 interface EditorState {
   project: ProjectData;
@@ -14,17 +25,27 @@ interface EditorState {
   showSettings: boolean;
   showHelp: boolean;
   fullscreen: boolean;
-  undoStack: string[];
-  redoStack: string[];
   zoom: number;
   searchQuery: string;
   promptHistory: { role: "user" | "assistant"; content: string }[];
   lessonProgress: Record<number, number>;
-  galleryProjects: { id: string; name: string; creator: string; thumbnail: string; likes: number; liked: boolean }[];
+  galleryProjects: GalleryProjectItem[];
+
+  // Settings
+  soundEffectsEnabled: boolean;
+  autoSaveEnabled: boolean;
+  geminiApiKey: string;
+
+  // Teacher Dashboard data
+  classes: ClassItem[];
+  students: StudentItem[];
+  assignments: AssignmentItem[];
+  challenges: ChallengeItem[];
 
   setProject: (project: ProjectData) => void;
   setProjectName: (name: string) => void;
   selectSprite: (id: string) => void;
+  updateSpriteBlocks: (id: string, blocksXml: string) => void;
   addSprite: (name: string, dataUrl: string, width?: number, height?: number) => void;
   deleteSprite: (id: string) => void;
   duplicateSprite: (id: string) => void;
@@ -48,18 +69,64 @@ interface EditorState {
   toggleFullscreen: () => void;
   setZoom: (zoom: number) => void;
   setSearchQuery: (q: string) => void;
-  pushUndo: () => void;
-  undo: () => void;
-  redo: () => void;
   addPromptMessage: (msg: { role: "user" | "assistant"; content: string }) => void;
   setLessonProgress: (lessonId: number, progress: number) => void;
+
+  // Gallery
   toggleGalleryLike: (id: string) => void;
+  publishToGallery: (project: ProjectData, creator?: string) => void;
+
+  // Settings
+  setSoundEffectsEnabled: (enabled: boolean) => void;
+  setAutoSaveEnabled: (enabled: boolean) => void;
+  setGeminiApiKey: (key: string) => void;
+
+  // Teacher Dashboard actions
+  addClass: (name: string) => void;
+  removeClass: (id: string) => void;
+  addStudent: (name: string, className: string) => void;
+  removeStudent: (id: string) => void;
+  addAssignment: (title: string, className: string, due: string) => void;
+  removeAssignment: (id: string) => void;
+  addChallenge: (title: string, desc: string) => void;
+  removeChallenge: (id: string) => void;
+  importTeacherData: (data: { classes: ClassItem[]; students: StudentItem[]; assignments: AssignmentItem[]; challenges: ChallengeItem[] }) => void;
 }
+
+const DEFAULT_STARTER_XML = `<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="event_when_flag" x="30" y="30">
+    <next>
+      <block type="control_forever">
+        <statement name="DO">
+          <block type="motion_move_steps">
+            <field name="STEPS">10</field>
+            <next>
+              <block type="motion_turn_clockwise">
+                <field name="DEGREES">15</field>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </next>
+  </block>
+  <block type="event_when_flag" x="280" y="30">
+    <next>
+      <block type="looks_say">
+        <field name="TEXT">Hello! 🚀</field>
+        <next>
+          <block type="control_wait">
+            <field name="SECS">2</field>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>`;
 
 function createDefaultProject(): ProjectData {
   const builtinSprites = getBuiltinSprites();
   const catSprite = builtinSprites[1];
-  const kiteSprite = builtinSprites[0];
 
   return {
     projectName: "My First Project",
@@ -77,7 +144,7 @@ function createDefaultProject(): ProjectData {
         rotationStyle: "all-around",
         layerOrder: 0,
         variables: {},
-        blocks: "",
+        blocks: DEFAULT_STARTER_XML,
         volume: 100,
         effects: { color: 0, brightness: 0, ghost: 0 },
       },
@@ -85,7 +152,7 @@ function createDefaultProject(): ProjectData {
     backdrops: getBuiltinBackdrops().map((b) => ({ id: generateId("backdrop"), name: b.name, dataUrl: b.dataUrl })),
     currentBackdrop: 0,
     variables: [],
-    scripts: "",
+    scripts: DEFAULT_STARTER_XML,
     sounds: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -94,6 +161,9 @@ function createDefaultProject(): ProjectData {
 
 const STORAGE_KEY = "kite_robotics_projects";
 const CURRENT_KEY = "kite_robotics_current";
+const GALLERY_KEY = "kite_robotics_gallery";
+const TEACHER_KEY = "kite_robotics_teacher";
+const SETTINGS_KEY = "kite_robotics_settings";
 
 function saveCurrent(project: ProjectData) {
   try {
@@ -137,7 +207,68 @@ export function deleteProjectFromList(name: string) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
 }
 
+function buildInitialGallery(): GalleryProjectItem[] {
+  try {
+    const saved = localStorage.getItem(GALLERY_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+
+  const creators = ["Alice", "Bob", "Charlie", "Dana", "Eve", "Frank"];
+  return EXAMPLE_PROJECTS.map((ex, i) => ({
+    id: String(i + 1),
+    name: ex.name,
+    creator: creators[i % creators.length],
+    thumbnail: "",
+    likes: 25 + i * 11,
+    liked: false,
+    projectData: ex.data,
+  }));
+}
+
+function buildInitialTeacherData() {
+  try {
+    const saved = localStorage.getItem(TEACHER_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return {
+    classes: [
+      { id: "1", name: "Intro to Coding", studentsCount: 24, assignmentsCount: 5 },
+      { id: "2", name: "Advanced Game Design", studentsCount: 15, assignmentsCount: 3 },
+    ],
+    students: [
+      { id: "1", name: "Alice Johnson", className: "Intro to Coding", progress: 85, projects: 4 },
+      { id: "2", name: "Bob Smith", className: "Intro to Coding", progress: 60, projects: 2 },
+      { id: "3", name: "Charlie Brown", className: "Advanced Game Design", progress: 92, projects: 7 },
+      { id: "4", name: "Dana White", className: "Intro to Coding", progress: 45, projects: 1 },
+      { id: "5", name: "Eve Davis", className: "Advanced Game Design", progress: 78, projects: 5 },
+    ],
+    assignments: [
+      { id: "1", title: "Lesson 1: Move a Character", className: "Intro to Coding", due: "2026-11-01", submitted: 18, total: 24 },
+      { id: "2", title: "Build a Catch Game", className: "Intro to Coding", due: "2026-11-08", submitted: 12, total: 24 },
+      { id: "3", title: "Platform Game", className: "Advanced Game Design", due: "2026-11-15", submitted: 10, total: 15 },
+    ],
+    challenges: [
+      { id: "1", title: "Speed Coder", desc: "Build a game in 10 blocks or less", submissions: 8 },
+      { id: "2", title: "Maze Master", desc: "Create a maze with 3 levels and keys", submissions: 5 },
+    ],
+  };
+}
+
+function loadInitialSettings() {
+  try {
+    const saved = localStorage.getItem(SETTINGS_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return {
+    soundEffectsEnabled: true,
+    autoSaveEnabled: true,
+    geminiApiKey: "",
+  };
+}
+
 const initialProject = loadCurrent() ?? createDefaultProject();
+const initialTeacher = buildInitialTeacherData();
+const initialSettings = loadInitialSettings();
 
 export const useEditorStore = create<EditorState>((set, get) => ({
   project: initialProject,
@@ -151,24 +282,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   showSettings: false,
   showHelp: false,
   fullscreen: false,
-  undoStack: [],
-  redoStack: [],
   zoom: 100,
   searchQuery: "",
   promptHistory: [],
   lessonProgress: {},
-  galleryProjects: [
-    { id: "1", name: "Catch the Apple", creator: "Alice", thumbnail: "", likes: 42, liked: false },
-    { id: "2", name: "Maze Runner", creator: "Bob", thumbnail: "", likes: 35, liked: false },
-    { id: "3", name: "Space Shooter", creator: "Charlie", thumbnail: "", likes: 58, liked: false },
-    { id: "4", name: "Flappy Bird", creator: "Dana", thumbnail: "", likes: 72, liked: false },
-    { id: "5", name: "Platformer", creator: "Eve", thumbnail: "", likes: 49, liked: false },
-    { id: "6", name: "Car Racing", creator: "Frank", thumbnail: "", likes: 31, liked: false },
-  ],
+  galleryProjects: buildInitialGallery(),
+
+  soundEffectsEnabled: initialSettings.soundEffectsEnabled ?? true,
+  autoSaveEnabled: initialSettings.autoSaveEnabled ?? true,
+  geminiApiKey: initialSettings.geminiApiKey ?? "",
+
+  classes: initialTeacher.classes,
+  students: initialTeacher.students,
+  assignments: initialTeacher.assignments,
+  challenges: initialTeacher.challenges,
 
   setProject: (project) => {
     saveCurrent(project);
-    set({ project, selectedSpriteId: project.sprites[0]?.id ?? null, undoStack: [], redoStack: [] });
+    set({ project, selectedSpriteId: project.sprites[0]?.id ?? null });
   },
 
   setProjectName: (name) => {
@@ -178,6 +309,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   selectSprite: (id) => set({ selectedSpriteId: id }),
+
+  updateSpriteBlocks: (id, blocksXml) => {
+    const project = get().project;
+    const updated = {
+      ...project,
+      sprites: project.sprites.map((s) => (s.id === id ? { ...s, blocks: blocksXml } : s)),
+      scripts: id === project.sprites[0]?.id ? blocksXml : project.scripts,
+      updatedAt: Date.now(),
+    };
+    if (get().autoSaveEnabled) {
+      saveCurrent(updated);
+    }
+    set({ project: updated });
+  },
 
   addSprite: (name, dataUrl, width = 80, height = 80) => {
     const project = get().project;
@@ -194,7 +339,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       rotationStyle: "all-around",
       layerOrder: project.sprites.length,
       variables: {},
-      blocks: "",
+      blocks: DEFAULT_STARTER_XML,
       volume: 100,
       effects: { color: 0, brightness: 0, ghost: 0 },
     };
@@ -246,7 +391,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       sprites: project.sprites.map((s) => (s.id === id ? { ...s, ...updates } : s)),
       updatedAt: Date.now(),
     };
-    saveCurrent(updated);
+    if (get().autoSaveEnabled) {
+      saveCurrent(updated);
+    }
     set({ project: updated });
   },
 
@@ -339,47 +486,152 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setZoom: (zoom) => set({ zoom: Math.max(50, Math.min(200, zoom)) }),
   setSearchQuery: (q) => set({ searchQuery: q }),
 
-  pushUndo: () => {
-    const project = get().project;
-    const xml = JSON.stringify(project);
-    set((s) => ({ undoStack: [...s.undoStack.slice(-49), xml], redoStack: [] }));
-  },
-
-  undo: () => {
-    const { undoStack, project } = get();
-    if (undoStack.length === 0) return;
-    const prev = undoStack[undoStack.length - 1];
-    const currentXml = JSON.stringify(project);
-    const restored = JSON.parse(prev);
-    saveCurrent(restored);
-    set((s) => ({
-      project: restored,
-      undoStack: s.undoStack.slice(0, -1),
-      redoStack: [...s.redoStack, currentXml],
-      selectedSpriteId: restored.sprites[0]?.id ?? null,
-    }));
-  },
-
-  redo: () => {
-    const { redoStack, project } = get();
-    if (redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1];
-    const currentXml = JSON.stringify(project);
-    const restored = JSON.parse(next);
-    saveCurrent(restored);
-    set((s) => ({
-      project: restored,
-      redoStack: s.redoStack.slice(0, -1),
-      undoStack: [...s.undoStack, currentXml],
-      selectedSpriteId: restored.sprites[0]?.id ?? null,
-    }));
-  },
-
   addPromptMessage: (msg) => set((s) => ({ promptHistory: [...s.promptHistory, msg] })),
   setLessonProgress: (lessonId, progress) => set((s) => ({ lessonProgress: { ...s.lessonProgress, [lessonId]: progress } })),
-  toggleGalleryLike: (id) => set((s) => ({
-    galleryProjects: s.galleryProjects.map((p) =>
+
+  // Gallery
+  toggleGalleryLike: (id) => {
+    const gallery = get().galleryProjects.map((p) =>
       p.id === id ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p
-    ),
-  })),
+    );
+    try {
+      localStorage.setItem(GALLERY_KEY, JSON.stringify(gallery));
+    } catch {}
+    set({ galleryProjects: gallery });
+  },
+
+  publishToGallery: (project, creator = "You") => {
+    const newEntry: GalleryProjectItem = {
+      id: generateId("gallery"),
+      name: project.projectName || "My Project",
+      creator,
+      thumbnail: "",
+      likes: 1,
+      liked: true,
+      projectData: JSON.parse(JSON.stringify(project)),
+    };
+    const gallery = [newEntry, ...get().galleryProjects];
+    try {
+      localStorage.setItem(GALLERY_KEY, JSON.stringify(gallery));
+    } catch {}
+    set({ galleryProjects: gallery });
+  },
+
+  // Settings
+  setSoundEffectsEnabled: (enabled) => {
+    set({ soundEffectsEnabled: enabled });
+    try {
+      const s = { ...loadInitialSettings(), soundEffectsEnabled: enabled };
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  setAutoSaveEnabled: (enabled) => {
+    set({ autoSaveEnabled: enabled });
+    try {
+      const s = { ...loadInitialSettings(), autoSaveEnabled: enabled };
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  setGeminiApiKey: (key) => {
+    set({ geminiApiKey: key });
+    try {
+      const s = { ...loadInitialSettings(), geminiApiKey: key };
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  // Teacher Dashboard
+  addClass: (name) => {
+    const classes = [...get().classes, { id: generateId("class"), name, studentsCount: 0, assignmentsCount: 0 }];
+    set({ classes });
+    try {
+      const s = { ...buildInitialTeacherData(), classes };
+      localStorage.setItem(TEACHER_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  removeClass: (id) => {
+    const classes = get().classes.filter((c) => c.id !== id);
+    set({ classes });
+    try {
+      const s = { ...buildInitialTeacherData(), classes };
+      localStorage.setItem(TEACHER_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  addStudent: (name, className) => {
+    const students = [...get().students, { id: generateId("student"), name, className, progress: 0, projects: 0 }];
+    const classes = get().classes.map((c) => c.name === className ? { ...c, studentsCount: c.studentsCount + 1 } : c);
+    set({ students, classes });
+    try {
+      const s = { classes, students, assignments: get().assignments, challenges: get().challenges };
+      localStorage.setItem(TEACHER_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  removeStudent: (id) => {
+    const st = get().students.find((s) => s.id === id);
+    const students = get().students.filter((s) => s.id !== id);
+    const classes = get().classes.map((c) => c.name === st?.className ? { ...c, studentsCount: Math.max(0, c.studentsCount - 1) } : c);
+    set({ students, classes });
+    try {
+      const s = { classes, students, assignments: get().assignments, challenges: get().challenges };
+      localStorage.setItem(TEACHER_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  addAssignment: (title, className, due) => {
+    const targetClass = get().classes.find((c) => c.name === className);
+    const total = targetClass?.studentsCount || 20;
+    const assignments = [...get().assignments, { id: generateId("assign"), title, className, due, submitted: 0, total }];
+    const classes = get().classes.map((c) => c.name === className ? { ...c, assignmentsCount: c.assignmentsCount + 1 } : c);
+    set({ assignments, classes });
+    try {
+      const s = { classes, students: get().students, assignments, challenges: get().challenges };
+      localStorage.setItem(TEACHER_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  removeAssignment: (id) => {
+    const a = get().assignments.find((x) => x.id === id);
+    const assignments = get().assignments.filter((x) => x.id !== id);
+    const classes = get().classes.map((c) => c.name === a?.className ? { ...c, assignmentsCount: Math.max(0, c.assignmentsCount - 1) } : c);
+    set({ assignments, classes });
+    try {
+      const s = { classes, students: get().students, assignments, challenges: get().challenges };
+      localStorage.setItem(TEACHER_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  addChallenge: (title, desc) => {
+    const challenges = [...get().challenges, { id: generateId("chal"), title, desc, submissions: 0 }];
+    set({ challenges });
+    try {
+      const s = { classes: get().classes, students: get().students, assignments: get().assignments, challenges };
+      localStorage.setItem(TEACHER_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  removeChallenge: (id) => {
+    const challenges = get().challenges.filter((c) => c.id !== id);
+    set({ challenges });
+    try {
+      const s = { classes: get().classes, students: get().students, assignments: get().assignments, challenges };
+      localStorage.setItem(TEACHER_KEY, JSON.stringify(s));
+    } catch {}
+  },
+
+  importTeacherData: (data) => {
+    set({
+      classes: data.classes || [],
+      students: data.students || [],
+      assignments: data.assignments || [],
+      challenges: data.challenges || [],
+    });
+    try {
+      localStorage.setItem(TEACHER_KEY, JSON.stringify(data));
+    } catch {}
+  },
 }));

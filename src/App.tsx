@@ -42,6 +42,9 @@ export default function App() {
   const [showVarPanel, setShowVarPanel] = useState(false);
   const [newVarName, setNewVarName] = useState("");
 
+  const penCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const askResolverRef = useRef<((ans: string) => void) | null>(null);
+
   const {
     project,
     isRunning,
@@ -61,7 +64,29 @@ export default function App() {
     addVariable,
     deleteVariable,
     toggleVariableVisible,
+    updateSpriteBlocks,
   } = useEditorStore();
+
+  const prevSpriteIdRef = useRef<string | null>(selectedSpriteId);
+
+  // Sync workspace blocks when switching sprites
+  useEffect(() => {
+    const prevId = prevSpriteIdRef.current;
+    if (prevId && prevId !== selectedSpriteId) {
+      const currentXml = blocklyRef.current?.getXml();
+      if (currentXml) {
+        updateSpriteBlocks(prevId, currentXml);
+      }
+    }
+    prevSpriteIdRef.current = selectedSpriteId;
+
+    if (selectedSpriteId) {
+      const currentSprite = useEditorStore.getState().project.sprites.find((s) => s.id === selectedSpriteId);
+      if (currentSprite && currentSprite.blocks) {
+        blocklyRef.current?.setXml(currentSprite.blocks);
+      }
+    }
+  }, [selectedSpriteId, updateSpriteBlocks]);
 
   const onStateChange = useCallback(() => {
     if (!engineRef.current) return;
@@ -78,15 +103,39 @@ export default function App() {
     });
   }, []);
 
+  const handleAsk = useCallback((question: string): Promise<string> => {
+    return new Promise((resolve) => {
+      askResolverRef.current = resolve;
+      setRuntimeState((prev) => ({ ...prev, asking: question }));
+    });
+  }, []);
+
+  const handleAnswerSubmit = useCallback((answer: string) => {
+    setRuntimeState((prev) => ({ ...prev, asking: null, answer }));
+    if (askResolverRef.current) {
+      askResolverRef.current(answer);
+      askResolverRef.current = null;
+    }
+  }, []);
+
   const handleRun = useCallback(() => {
     const ws = blocklyRef.current?.getWorkspace();
     if (!ws) return;
+    const activeSpriteId = useEditorStore.getState().selectedSpriteId;
+    if (activeSpriteId) {
+      const xml = blocklyRef.current?.getXml() || "";
+      useEditorStore.getState().updateSpriteBlocks(activeSpriteId, xml);
+    }
     const currentProject = useEditorStore.getState().project;
     const engine = new RuntimeEngine(currentProject, onStateChange);
+    if (penCanvasRef.current) {
+      engine.setPenCanvas(penCanvasRef.current);
+    }
+    engine.setAskCallback(handleAsk);
     engineRef.current = engine;
     setRunning(true);
-    engine.run(ws as Blockly.Workspace, { type: "flag" });
-  }, [onStateChange, setRunning]);
+    engine.run(ws as Blockly.Workspace, { type: "flag" }, activeSpriteId);
+  }, [onStateChange, setRunning, handleAsk]);
 
   const handleStop = useCallback(() => {
     engineRef.current?.stop();
@@ -120,10 +169,10 @@ export default function App() {
       }
       if (engineRef.current) {
         engineRef.current.handleKeyDown(e.key);
-        // Also trigger key-pressed scripts
         const ws = blocklyRef.current?.getWorkspace();
+        const activeSpriteId = useEditorStore.getState().selectedSpriteId;
         if (ws && !engineRef.current.ctx.stopAll) {
-          engineRef.current.run(ws as Blockly.Workspace, { type: "key", key: e.key });
+          engineRef.current.run(ws as Blockly.Workspace, { type: "key", key: e.key }, activeSpriteId);
         }
       }
     };
@@ -148,8 +197,9 @@ export default function App() {
   const handleSpriteClick = useCallback((spriteId: string) => {
     if (engineRef.current && !engineRef.current.ctx.stopAll) {
       const ws = blocklyRef.current?.getWorkspace();
+      const activeSpriteId = useEditorStore.getState().selectedSpriteId;
       if (ws) {
-        engineRef.current.run(ws as Blockly.Workspace, { type: "clicked", spriteId });
+        engineRef.current.run(ws as Blockly.Workspace, { type: "clicked", spriteId }, activeSpriteId);
       }
     }
   }, []);
@@ -344,8 +394,15 @@ export default function App() {
         </div>
 
         {/* Right panel - Stage */}
-        <div className={`flex flex-col bg-white border-l border-gray-200 shrink-0 ${fullscreen ? "fixed inset-0 z-50 bg-black" : ""}`} style={{ width: fullscreen ? "100%" : "min(560px, 42vw)" }}>
-          <div className={`relative flex-1 flex items-center justify-center ${fullscreen ? "min-h-0 bg-black p-0" : "min-h-0 overflow-hidden bg-gray-100 p-3"}`}>
+        <div
+          className={`flex flex-col bg-white border-l border-gray-200 shrink-0 ${fullscreen ? "fixed inset-0 z-50 bg-black" : ""}`}
+          style={{
+            width: fullscreen ? "100%" : "380px",
+            minWidth: fullscreen ? "100%" : "380px",
+            maxWidth: fullscreen ? "100%" : "380px",
+          }}
+        >
+          <div className={`relative flex-1 flex items-center justify-center ${fullscreen ? "min-h-0 bg-black p-0" : "min-h-0 overflow-hidden bg-gray-100 p-2"}`}>
             <StageCanvas
               project={project}
               runtimeState={isRunning ? runtimeState : { ...runtimeState, backdrop: project.currentBackdrop }}
@@ -356,6 +413,10 @@ export default function App() {
               fullscreen={fullscreen}
               stageSize={stageSize}
               visibleVariables={visibleVariables}
+              onMountPenCanvas={(c) => {
+                penCanvasRef.current = c;
+              }}
+              onAnswerSubmit={handleAnswerSubmit}
             />
             {fullscreen && (
               <button

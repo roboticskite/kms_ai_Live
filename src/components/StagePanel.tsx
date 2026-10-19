@@ -61,7 +61,7 @@ export default function StagePanel() {
   };
 
   return (
-    <aside className="relative flex w-[36%] min-w-32 max-w-[210px] shrink-0 flex-col gap-2 border-l border-gray-200 bg-white p-2">
+    <aside className="relative flex w-[124px] shrink-0 flex-col gap-2 border-l border-gray-200 bg-white p-2">
       <div className="flex items-center justify-between">
         <div className="min-w-0">
           <h2 className="truncate text-xs font-semibold text-gray-700">Backdrops</h2>

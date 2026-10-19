@@ -261,7 +261,7 @@ function SpriteProperties({
   ] as const;
 
   return (
-    <div className="grid min-w-0 grid-cols-3 items-center gap-1.5 text-[11px] text-gray-600">
+    <div className="grid min-w-0 grid-cols-2 items-center gap-1.5 text-[11px] text-gray-600">
       <div className="flex h-7 items-center gap-1">
         <span>Show</span>
         <button
