@@ -4,6 +4,10 @@ import { initializeRuntimeState } from "./spriteState";
 import { generateSpriteId } from "../utils/helpers";
 import { useEditorStore } from "../store/editorStore";
 
+export interface ThreadContext {
+  stopped: boolean;
+}
+
 export interface BroadcastReceiver {
   block: Blockly.Block;
   sprite: RuntimeSpriteState;
@@ -44,6 +48,7 @@ export class RuntimeEngine {
   private lastTime: number = 0;
   private runningScripts: { stop: () => void }[] = [];
   private headlessWorkspaces: Blockly.Workspace[] = [];
+  private compiledTopBlocks: { sprite: RuntimeSpriteState; block: Blockly.Block }[] = [];
   private imageCache: Map<string, HTMLImageElement> = new Map();
 
   constructor(project: ProjectData, onStateChange: () => void) {
@@ -83,6 +88,7 @@ export class RuntimeEngine {
       } catch {}
     });
     this.headlessWorkspaces = [];
+    this.compiledTopBlocks = [];
   }
 
   async run(
@@ -99,49 +105,65 @@ export class RuntimeEngine {
       this.ctx.timer = 0;
       this.ctx.broadcastHandlers.clear();
       this.clearHeadless();
-    }
 
-    const scriptsToRun: { block: Blockly.Block; sprite: RuntimeSpriteState }[] = [];
-
-    for (const spriteData of this.project.sprites) {
-      const runtimeSprite = this.ctx.sprites[spriteData.id];
-      if (!runtimeSprite) continue;
-
-      let topBlocks: Blockly.Block[] = [];
-      if (workspace && activeSpriteId && spriteData.id === activeSpriteId) {
-        topBlocks = workspace.getTopBlocks(false);
-      } else if (spriteData.blocks && spriteData.blocks.trim()) {
+      // Sync active sprite's live workspace XML into project data first
+      if (workspace && activeSpriteId) {
         try {
-          const ws = new (Blockly as any).Workspace();
-          this.headlessWorkspaces.push(ws);
-          const dom = Blockly.utils.xml.textToDom(spriteData.blocks);
-          Blockly.Xml.domToWorkspace(dom, ws);
-          topBlocks = ws.getTopBlocks(false);
-        } catch (e) {
-          console.warn("Could not parse blocks for sprite:", spriteData.name, e);
+          const dom = Blockly.Xml.workspaceToDom(workspace);
+          const xml = Blockly.Xml.domToText(dom);
+          const activeSprite = this.project.sprites.find((s) => s.id === activeSpriteId);
+          if (activeSprite) activeSprite.blocks = xml;
+        } catch {}
+      }
+
+      // Compile isolated execution workspaces for EVERY sprite in the project
+      for (const spriteData of this.project.sprites) {
+        const runtimeSprite = this.ctx.sprites[spriteData.id];
+        if (!runtimeSprite) continue;
+
+        if (spriteData.blocks && spriteData.blocks.trim()) {
+          try {
+            const ws = new Blockly.Workspace();
+            this.headlessWorkspaces.push(ws);
+            const dom = Blockly.utils.xml.textToDom(spriteData.blocks);
+            Blockly.Xml.domToWorkspace(dom, ws);
+            const topBlocks = ws.getTopBlocks(false);
+            for (const block of topBlocks) {
+              this.compiledTopBlocks.push({ sprite: runtimeSprite, block });
+              if (block.type === "event_when_receive") {
+                const msg = this.getField(block, "MESSAGE");
+                const existing = this.ctx.broadcastHandlers.get(msg) || [];
+                existing.push({ block, sprite: runtimeSprite });
+                this.ctx.broadcastHandlers.set(msg, existing);
+              }
+            }
+          } catch (e) {
+            console.warn("Could not compile blocks for sprite:", spriteData.name, e);
+          }
         }
       }
 
-      for (const block of topBlocks) {
-        if (this.matchTrigger(block, trigger, spriteData.id)) {
-          scriptsToRun.push({ block, sprite: runtimeSprite });
-        }
-        if (block.type === "event_when_receive") {
-          const msg = this.getField(block, "MESSAGE");
-          const existing = this.ctx.broadcastHandlers.get(msg) || [];
-          existing.push({ block, sprite: runtimeSprite });
-          this.ctx.broadcastHandlers.set(msg, existing);
+      // Launch all green-flag event blocks in parallel for all sprites
+      for (const { block, sprite } of this.compiledTopBlocks) {
+        if (this.ctx.stopAll) break;
+        if (this.matchTrigger(block, trigger, sprite.id)) {
+          this.startScript(block, sprite);
         }
       }
+
+      if (!this.animationFrame) {
+        this.startGameLoop();
+      }
+      return;
     }
 
-    for (const { block, sprite } of scriptsToRun) {
+    // For keypresses, clicks, and other runtime events:
+    // Execute matching hat blocks from pre-compiled workspaces without re-parsing XML!
+    for (const { block, sprite } of this.compiledTopBlocks) {
       if (this.ctx.stopAll) break;
-      this.startScript(block, sprite);
-    }
-
-    if (!this.animationFrame) {
-      this.startGameLoop();
+      if (this.matchTrigger(block, trigger, sprite.id)) {
+        this.startScript(block, sprite);
+      }
     }
   }
 
@@ -174,10 +196,10 @@ export class RuntimeEngine {
   }
 
   private startScript(block: Blockly.Block, sprite: RuntimeSpriteState | null) {
-    let stopped = false;
+    const thread: ThreadContext = { stopped: false };
     const scriptObj = {
       stop: () => {
-        stopped = true;
+        thread.stopped = true;
       },
     };
     this.runningScripts.push(scriptObj);
@@ -188,8 +210,8 @@ export class RuntimeEngine {
         if (this.isHatBlock(block)) {
           current = block.getNextBlock();
         }
-        while (current && !stopped && !this.ctx.stopAll) {
-          await this.executeBlock(current, sprite);
+        while (current && !thread.stopped && !this.ctx.stopAll) {
+          await this.executeBlock(current, sprite, thread);
           current = current.getNextBlock();
         }
       } catch (e) {
@@ -225,8 +247,8 @@ export class RuntimeEngine {
     ctx.restore();
   }
 
-  private async executeBlock(block: Blockly.Block, sprite: RuntimeSpriteState | null): Promise<any> {
-    if (this.ctx.stopAll || this.ctx.stopScript) return;
+  private async executeBlock(block: Blockly.Block, sprite: RuntimeSpriteState | null, thread?: ThreadContext): Promise<any> {
+    if (this.ctx.stopAll || (thread && thread.stopped)) return;
     const type = block.type;
 
     switch (type) {
@@ -447,50 +469,50 @@ export class RuntimeEngine {
 
       // ============ CONTROL ============
       case "control_wait": {
-        await this.wait(this.getNumField(block, "SECS"));
+        await this.wait(this.getNumField(block, "SECS"), thread);
         break;
       }
       case "control_repeat": {
-        let times = (await this.evalInput(block, "TIMES", 10)) as number;
+        let times = (await this.evalInput(block, "TIMES", 10, sprite, thread)) as number;
         if (typeof times !== "number" || isNaN(times)) times = 10;
         const doBlock = block.getInput("DO")?.connection?.targetBlock();
         for (let i = 0; i < times; i++) {
-          if (this.ctx.stopAll || this.ctx.stopScript) return;
-          await this.runStatementStack(doBlock, sprite);
+          if (this.ctx.stopAll || (thread && thread.stopped)) return;
+          await this.runStatementStack(doBlock, sprite, thread);
           await this.frame();
         }
         break;
       }
       case "control_forever": {
         const doBlock = block.getInput("DO")?.connection?.targetBlock();
-        while (!this.ctx.stopAll && !this.ctx.stopScript) {
-          await this.runStatementStack(doBlock, sprite);
+        while (!this.ctx.stopAll && (!thread || !thread.stopped)) {
+          await this.runStatementStack(doBlock, sprite, thread);
           await this.frame();
         }
         return;
       }
       case "control_if": {
-        const cond = await this.evalInput(block, "CONDITION", false);
+        const cond = await this.evalInput(block, "CONDITION", false, sprite, thread);
         if (cond) {
           const doBlock = block.getInput("DO")?.connection?.targetBlock();
-          await this.runStatementStack(doBlock, sprite);
+          await this.runStatementStack(doBlock, sprite, thread);
         }
         break;
       }
       case "control_if_else": {
-        const cond = await this.evalInput(block, "CONDITION", false);
+        const cond = await this.evalInput(block, "CONDITION", false, sprite, thread);
         const branch = cond ? "DO" : "ELSE";
         const doBlock = block.getInput(branch)?.connection?.targetBlock();
-        await this.runStatementStack(doBlock, sprite);
+        await this.runStatementStack(doBlock, sprite, thread);
         break;
       }
       case "control_repeat_until": {
         const doBlock = block.getInput("DO")?.connection?.targetBlock();
-        let cond = await this.evalInput(block, "CONDITION", false);
-        while (!cond && !this.ctx.stopAll && !this.ctx.stopScript) {
-          await this.runStatementStack(doBlock, sprite);
+        let cond = await this.evalInput(block, "CONDITION", false, sprite, thread);
+        while (!cond && !this.ctx.stopAll && (!thread || !thread.stopped)) {
+          await this.runStatementStack(doBlock, sprite, thread);
           await this.frame();
-          cond = await this.evalInput(block, "CONDITION", false);
+          cond = await this.evalInput(block, "CONDITION", false, sprite, thread);
         }
         break;
       }
@@ -499,8 +521,8 @@ export class RuntimeEngine {
         if (mode === "all") {
           this.ctx.stopAll = true;
           this.stop();
-        } else {
-          this.ctx.stopScript = true;
+        } else if (thread) {
+          thread.stopped = true;
         }
         break;
       }
@@ -535,7 +557,7 @@ export class RuntimeEngine {
         if (sprite?.isClone) {
           const idx = this.ctx.clones.findIndex((c) => c.id === sprite.id);
           if (idx >= 0) this.ctx.clones.splice(idx, 1);
-          this.ctx.stopScript = true;
+          if (thread) thread.stopped = true;
           this.ctx.onStateChange();
         }
         break;
@@ -572,7 +594,11 @@ export class RuntimeEngine {
           return sprite.x - halfW <= -240 || sprite.x + halfW >= 240 || sprite.y - halfH <= -180 || sprite.y + halfH >= 180;
         }
         const targets = this.getAllSprites().filter(
-          (s) => s.id !== sprite.id && s.name.toLowerCase() === targetName && s.visible
+          (s) =>
+            s.id !== sprite.id &&
+            s.visible &&
+            (s.name.toLowerCase().trim() === targetName ||
+              s.name.toLowerCase().replace(/\s+/g, "") === targetName.replace(/\s+/g, ""))
         );
         for (const t of targets) {
           if (this.checkCollision(sprite, t)) return true;
@@ -935,19 +961,28 @@ export class RuntimeEngine {
     return allBlocks.find((b) => b.type === "procedures_def" && b.getFieldValue("NAME") === name) ?? null;
   }
 
-  private async runStatementStack(block: Blockly.Block | null | undefined, sprite: RuntimeSpriteState | null) {
+  private async runStatementStack(
+    block: Blockly.Block | null | undefined,
+    sprite: RuntimeSpriteState | null,
+    thread?: ThreadContext
+  ) {
     let current = block;
-    while (current && !this.ctx.stopAll && !this.ctx.stopScript) {
-      await this.executeBlock(current, sprite);
+    while (current && !this.ctx.stopAll && (!thread || !thread.stopped)) {
+      await this.executeBlock(current, sprite, thread);
       current = current.getNextBlock();
     }
-    this.ctx.stopScript = false;
   }
 
-  private async evalInput(block: Blockly.Block, inputName: string, defaultValue: any): Promise<any> {
+  private async evalInput(
+    block: Blockly.Block,
+    inputName: string,
+    defaultValue: any,
+    sprite: RuntimeSpriteState | null = null,
+    thread?: ThreadContext
+  ): Promise<any> {
     const inputBlock = block.getInput(inputName)?.connection?.targetBlock();
     if (inputBlock) {
-      return await this.executeBlock(inputBlock, null);
+      return await this.executeBlock(inputBlock, sprite, thread);
     }
     return defaultValue;
   }
@@ -973,11 +1008,13 @@ export class RuntimeEngine {
   private checkCollision(a: RuntimeSpriteState, b: RuntimeSpriteState): boolean {
     const aCostume = a.costumes[a.costumeIndex];
     const bCostume = b.costumes[b.costumeIndex];
-    const aRad = (((a.size / 100) * (aCostume?.width ?? 80)) / 2);
-    const bRad = (((b.size / 100) * (bCostume?.width ?? 80)) / 2);
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    return Math.sqrt(dx * dx + dy * dy) < (aRad + bRad) * 0.75;
+    const aW = Math.max(20, ((a.size / 100) * (aCostume?.width ?? 80)) * 0.85);
+    const aH = Math.max(20, ((a.size / 100) * (aCostume?.height ?? 80)) * 0.85);
+    const bW = Math.max(20, ((b.size / 100) * (bCostume?.width ?? 80)) * 0.85);
+    const bH = Math.max(20, ((b.size / 100) * (bCostume?.height ?? 80)) * 0.85);
+    const dx = Math.abs(a.x - b.x);
+    const dy = Math.abs(a.y - b.y);
+    return dx < (aW + bW) / 2 && dy < (aH + bH) / 2;
   }
 
   private async broadcast(message: string, wait: boolean): Promise<void> {
@@ -1150,11 +1187,11 @@ export class RuntimeEngine {
     ctx.restore();
   }
 
-  private async wait(seconds: number) {
+  private async wait(seconds: number, thread?: ThreadContext) {
     const ms = Math.max(0.01, seconds) * 1000;
     const start = Date.now();
     while (Date.now() - start < ms) {
-      if (this.ctx.stopAll || this.ctx.stopScript) return;
+      if (this.ctx.stopAll || (thread && thread.stopped)) return;
       await this.frame();
     }
   }

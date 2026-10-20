@@ -82,8 +82,12 @@ export default function App() {
 
     if (selectedSpriteId) {
       const currentSprite = useEditorStore.getState().project.sprites.find((s) => s.id === selectedSpriteId);
-      if (currentSprite && currentSprite.blocks) {
-        blocklyRef.current?.setXml(currentSprite.blocks);
+      if (currentSprite) {
+        if (currentSprite.blocks && currentSprite.blocks.trim()) {
+          blocklyRef.current?.setXml(currentSprite.blocks);
+        } else {
+          blocklyRef.current?.clear();
+        }
       }
     }
   }, [selectedSpriteId, updateSpriteBlocks]);
@@ -173,13 +177,9 @@ export default function App() {
         useEditorStore.getState().toggleFullscreen();
         return;
       }
-      if (engineRef.current) {
+      if (engineRef.current && !engineRef.current.ctx.stopAll) {
         engineRef.current.handleKeyDown(e.key);
-        const ws = blocklyRef.current?.getWorkspace();
-        const activeSpriteId = useEditorStore.getState().selectedSpriteId;
-        if (ws && !engineRef.current.ctx.stopAll) {
-          engineRef.current.run(ws as Blockly.Workspace, { type: "key", key: e.key }, activeSpriteId);
-        }
+        engineRef.current.run(null, { type: "key", key: e.key });
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -202,11 +202,7 @@ export default function App() {
 
   const handleSpriteClick = useCallback((spriteId: string) => {
     if (engineRef.current && !engineRef.current.ctx.stopAll) {
-      const ws = blocklyRef.current?.getWorkspace();
-      const activeSpriteId = useEditorStore.getState().selectedSpriteId;
-      if (ws) {
-        engineRef.current.run(ws as Blockly.Workspace, { type: "clicked", spriteId }, activeSpriteId);
-      }
+      engineRef.current.run(null, { type: "clicked", spriteId });
     }
   }, []);
 
