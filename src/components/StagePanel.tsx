@@ -61,7 +61,7 @@ function StagePanel() {
   };
 
   return (
-    <aside className="relative flex w-[124px] shrink-0 flex-col gap-2 border-l border-gray-200 bg-white p-2">
+    <aside className="relative flex w-[145px] shrink-0 flex-col gap-2 border-l border-gray-200 bg-white p-2">
       <div className="flex items-center justify-between">
         <div className="min-w-0">
           <h2 className="truncate text-xs font-semibold text-gray-700">Backdrops</h2>
@@ -80,7 +80,7 @@ function StagePanel() {
 
       <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-1.5 overflow-x-hidden overflow-y-auto scrollbar-thin">
         {project.backdrops.map((backdrop, index) => (
-          <div key={backdrop.id} className="group relative h-14 w-16 shrink-0">
+          <div key={backdrop.id} className="group relative h-14 w-full shrink-0">
             <button
               className={`h-full w-full overflow-hidden rounded-lg border-2 transition-colors ${
                 project.currentBackdrop === index
@@ -107,7 +107,7 @@ function StagePanel() {
           </div>
         ))}
         <button
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-500 hover:border-kite-400 hover:text-kite-600"
+          className="flex h-14 w-full shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-500 hover:border-kite-400 hover:text-kite-600"
           onClick={() => setShowPicker(true)}
           title="Add a backdrop"
         >

@@ -261,46 +261,52 @@ function SpriteProperties({
   ] as const;
 
   return (
-    <div className="grid min-w-0 grid-cols-2 items-center gap-1.5 text-[11px] text-gray-600">
-      <div className="flex h-7 items-center gap-1">
-        <span>Show</span>
-        <button
-          className={`rounded-l border p-1 ${sprite.visible ? "border-kite-400 bg-kite-50 text-kite-700" : "border-gray-200 text-gray-400"}`}
-          onClick={() => onUpdate(spriteId, { visible: true })}
-          title="Show sprite"
-          aria-label="Show sprite"
-          aria-pressed={sprite.visible}
-        >
-          <Eye size={14} />
-        </button>
-        <button
-          className={`rounded-r border border-l-0 p-1 ${!sprite.visible ? "border-kite-400 bg-kite-50 text-kite-700" : "border-gray-200 text-gray-400"}`}
-          onClick={() => onUpdate(spriteId, { visible: false })}
-          title="Hide sprite"
-          aria-label="Hide sprite"
-          aria-pressed={!sprite.visible}
-        >
-          <EyeOff size={14} />
-        </button>
+    <div className="grid min-w-0 grid-cols-2 items-center gap-2 text-xs text-gray-600">
+      <div className="flex h-8 w-full items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-2.5">
+        <span className="font-medium text-gray-700 text-xs">Show</span>
+        <div className="flex rounded border border-gray-200 overflow-hidden bg-white">
+          <button
+            className={`px-2 py-1 transition-colors ${sprite.visible ? "bg-kite-500 text-white font-semibold" : "text-gray-400 hover:text-gray-600"}`}
+            onClick={() => onUpdate(spriteId, { visible: true })}
+            title="Show sprite"
+            aria-label="Show sprite"
+            aria-pressed={sprite.visible}
+          >
+            <Eye size={13} />
+          </button>
+          <button
+            className={`px-2 py-1 border-l border-gray-200 transition-colors ${!sprite.visible ? "bg-kite-500 text-white font-semibold" : "text-gray-400 hover:text-gray-600"}`}
+            onClick={() => onUpdate(spriteId, { visible: false })}
+            title="Hide sprite"
+            aria-label="Hide sprite"
+            aria-pressed={!sprite.visible}
+          >
+            <EyeOff size={13} />
+          </button>
+        </div>
       </div>
 
       {controls.map(({ key, label, icon: Icon, min, max }) => (
         <div key={key} className="relative">
           <button
-            className="flex h-7 min-w-0 items-center justify-between gap-1 rounded-full border border-gray-200 bg-white px-2 text-xs hover:border-kite-400"
+            className="flex h-8 w-full min-w-0 items-center justify-between gap-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-white px-2.5 text-xs hover:border-kite-400 transition-colors shadow-2xs"
             onClick={() => setOpenControl((current) => current === key ? null : key)}
             aria-expanded={openControl === key}
             title={`Adjust ${label.toLowerCase()}`}
           >
-            <Icon size={13} />
-            <span>{label}</span>
-            <span className="min-w-6 text-center font-medium text-gray-800">{Math.round(sprite[key])}</span>
+            <div className="flex items-center gap-1.5">
+              <Icon size={14} className="text-gray-500 shrink-0" />
+              <span className="font-medium text-gray-700">{label}</span>
+            </div>
+            <span className="font-semibold text-gray-900 bg-white px-1.5 py-0.5 rounded border border-gray-200 text-[11px] min-w-7 text-center">
+              {Math.round(sprite[key])}
+            </span>
           </button>
           {openControl === key && (
-            <div className="absolute bottom-full left-0 z-50 mb-2 w-48 rounded-lg border border-gray-200 bg-white p-3 shadow-xl">
-              <div className="mb-2 flex items-center justify-between text-xs font-medium text-gray-700">
+            <div className="absolute bottom-full left-0 z-50 mb-2 w-48 rounded-xl border border-gray-200 bg-white p-3 shadow-2xl animate-fade-in">
+              <div className="mb-2 flex items-center justify-between text-xs font-semibold text-gray-800">
                 <span>{label}</span>
-                <span>{Math.round(sprite[key])}</span>
+                <span className="text-kite-600 font-bold">{Math.round(sprite[key])}</span>
               </div>
               <input
                 type="range"
@@ -310,9 +316,9 @@ function SpriteProperties({
                 value={sprite[key]}
                 onChange={(e) => onUpdate(spriteId, { [key]: Number(e.target.value) })}
                 aria-label={`${label} slider`}
-                className="w-full accent-kite-500"
+                className="w-full accent-kite-500 cursor-pointer"
               />
-              <div className="mt-1 flex justify-between text-[10px] text-gray-400">
+              <div className="mt-1 flex justify-between text-[10px] text-gray-400 font-mono">
                 <span>{min}</span>
                 <span>{max}</span>
               </div>
@@ -320,7 +326,6 @@ function SpriteProperties({
           )}
         </div>
       ))}
-
     </div>
   );
 }

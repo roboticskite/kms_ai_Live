@@ -436,7 +436,7 @@ export default function App() {
             )}
           </div>
           {!fullscreen && (
-            <div className="flex h-44 shrink-0 min-h-0 border-t border-gray-200">
+            <div className="flex h-[255px] shrink-0 min-h-0 border-t border-gray-200">
               <div className="flex-1 min-w-0">
                 <SpritePanel />
               </div>
