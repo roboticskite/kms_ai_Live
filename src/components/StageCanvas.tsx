@@ -122,6 +122,8 @@ export default function StageCanvas({
 
       if (sprite.effects.color !== 0) {
         ctx.filter = `hue-rotate(${sprite.effects.color * 3.6}deg)`;
+      } else {
+        ctx.filter = "none";
       }
 
       ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
@@ -247,7 +249,7 @@ export default function StageCanvas({
         onMouseMove={handleMouseMove}
         onMouseDown={onMouseDown}
         onMouseUp={onMouseUp}
-        style={fullscreen ? undefined : { maxHeight: "270px", aspectRatio: `${stageSize.width}/${stageSize.height}` }}
+        style={fullscreen ? undefined : { maxHeight: "340px", aspectRatio: `${stageSize.width}/${stageSize.height}` }}
         className={`rounded-xl shadow-md border border-gray-200 bg-white cursor-pointer ${
           fullscreen ? "max-h-full max-w-full object-contain" : "max-w-full h-auto object-contain"
         }`}

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { memo,  useState, useRef  } from "react";
 import {
   Play,
   Square,
@@ -31,7 +31,7 @@ interface Props {
   blocklyRef: React.MutableRefObject<any>;
 }
 
-export default function TopBar({ onRun, onStop, onRestart, blocklyRef }: Props) {
+function TopBar({ onRun, onStop, onRestart, blocklyRef }: Props) {
   const {
     project,
     setProjectName,
@@ -218,3 +218,5 @@ export default function TopBar({ onRun, onStop, onRestart, blocklyRef }: Props) 
     </div>
   );
 }
+
+export default memo(TopBar);

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useEditorStore } from "../store/editorStore";
 import { getBuiltinSprites, readFileAsDataURL } from "../utils/helpers";
-import { useMemo, useRef, useState } from "react";
+import { memo,  useMemo, useRef, useState  } from "react";
 
 const SPRITE_CATEGORY_GROUPS = {
   Animals: ["Cat", "Bird", "Fish", "Butterfly", "Dinosaur", "Dog", "Rabbit", "Panda", "Tiger", "Bear", "Frog", "Penguin", "Turtle", "Owl", "Lion", "Monkey", "Elephant", "Giraffe", "Snake", "Octopus"],
@@ -35,7 +35,7 @@ function getSpriteCategory(name: string) {
   )?.[0] ?? "Things";
 }
 
-export default function SpritePanel() {
+function SpritePanel() {
   const {
     project,
     selectedSpriteId,
@@ -324,3 +324,5 @@ function SpriteProperties({
     </div>
   );
 }
+
+export default memo(SpritePanel);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
+import { memo,  useEffect, useRef, forwardRef, useImperativeHandle  } from "react";
 import * as Blockly from "blockly";
 import { defineAllBlocks } from "../blocks/blockDefinitions";
 import { buildToolboxJson, buildBeginnerToolboxJson, TOOLBOX_CATEGORIES } from "../blocks/toolbox";
@@ -299,4 +299,4 @@ const BlocklyWorkspace = forwardRef<BlocklyWorkspaceHandle, Props>(({ beginnerMo
 });
 
 BlocklyWorkspace.displayName = "BlocklyWorkspace";
-export default BlocklyWorkspace;
+export default memo(BlocklyWorkspace);

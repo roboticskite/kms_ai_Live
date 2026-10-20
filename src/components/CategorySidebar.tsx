@@ -1,3 +1,4 @@
+import { memo } from "react";
 import {
   Move,
   Eye,
@@ -42,7 +43,7 @@ interface Props {
   onSearchChange: (q: string) => void;
 }
 
-export default function CategorySidebar({
+function CategorySidebar({
   activeCategory,
   onSelectCategory,
   searchQuery,
@@ -141,3 +142,5 @@ export default function CategorySidebar({
     </div>
   );
 }
+
+export default memo(CategorySidebar);

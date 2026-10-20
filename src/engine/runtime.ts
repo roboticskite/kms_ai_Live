@@ -908,7 +908,6 @@ export class RuntimeEngine {
       default:
         break;
     }
-    this.ctx.onStateChange();
   }
 
   private triggerCloneScripts(parentSpriteId: string, clone: RuntimeSpriteState) {
@@ -1190,6 +1189,7 @@ export class RuntimeEngine {
     this.runningScripts = [];
     this.clearHeadless();
     this.stopAllSounds();
+    this.ctx.onStateChange();
   }
 
   handleKeyDown(key: string) {

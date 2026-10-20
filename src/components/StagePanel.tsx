@@ -1,5 +1,5 @@
 import { ArrowLeft, ImagePlus, Plus, Search, Trash2, Upload, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { memo,  useMemo, useRef, useState  } from "react";
 import { useEditorStore } from "../store/editorStore";
 import { getBuiltinBackdrops, readFileAsDataURL } from "../utils/helpers";
 
@@ -20,7 +20,7 @@ function getBackdropCategory(name: string) {
   )?.[0] ?? "Basic";
 }
 
-export default function StagePanel() {
+function StagePanel() {
   const { project, setBackdrop, addBackdrop, deleteBackdrop } = useEditorStore();
   const [showPicker, setShowPicker] = useState(false);
   const [activeCategory, setActiveCategory] = useState("All");
@@ -228,3 +228,4 @@ export default function StagePanel() {
     </aside>
   );
 }
+export default memo(StagePanel);

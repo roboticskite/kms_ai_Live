@@ -88,8 +88,13 @@ export default function App() {
     }
   }, [selectedSpriteId, updateSpriteBlocks]);
 
+  const stateUpdateScheduledRef = useRef(false);
   const onStateChange = useCallback(() => {
-    if (!engineRef.current) return;
+    if (!engineRef.current || stateUpdateScheduledRef.current) return;
+    stateUpdateScheduledRef.current = true;
+    requestAnimationFrame(() => {
+      stateUpdateScheduledRef.current = false;
+      if (!engineRef.current) return;
     const ctx = engineRef.current.ctx;
     setRuntimeState({
       sprites: { ...ctx.sprites },
@@ -100,6 +105,7 @@ export default function App() {
       levelComplete: ctx.levelComplete,
       answer: ctx.answer,
       asking: (ctx as any)._asking ?? null,
+      });
     });
   }, []);
 
@@ -321,7 +327,7 @@ export default function App() {
             {/* Custom category sidebar */}
             <CategorySidebar
               activeCategory={activeCategory}
-              onSelectCategory={(name) => {
+              onSelectCategory={(name: string) => {
                 setActiveCategory(name);
                 // Let Blockly render first, then open category
                 setTimeout(() => {
@@ -397,9 +403,9 @@ export default function App() {
         <div
           className={`flex flex-col bg-white border-l border-gray-200 shrink-0 ${fullscreen ? "fixed inset-0 z-50 bg-black" : ""}`}
           style={{
-            width: fullscreen ? "100%" : "380px",
-            minWidth: fullscreen ? "100%" : "380px",
-            maxWidth: fullscreen ? "100%" : "380px",
+            width: fullscreen ? "100%" : "440px",
+            minWidth: fullscreen ? "100%" : "440px",
+            maxWidth: fullscreen ? "100%" : "440px",
           }}
         >
           <div className={`relative flex-1 flex items-center justify-center ${fullscreen ? "min-h-0 bg-black p-0" : "min-h-0 overflow-hidden bg-gray-100 p-2"}`}>
@@ -430,7 +436,7 @@ export default function App() {
             )}
           </div>
           {!fullscreen && (
-            <div className="flex h-52 shrink-0 min-h-0 border-t border-gray-200">
+            <div className="flex h-44 shrink-0 min-h-0 border-t border-gray-200">
               <div className="flex-1 min-w-0">
                 <SpritePanel />
               </div>
