@@ -126,7 +126,7 @@ export default function GalleryPanel({ onClose, onPlayProject }: Props) {
                     {previewCostume ? (
                       <img src={previewCostume} alt={p.name} className="w-16 h-16 object-contain z-10 transition-transform group-hover:scale-110" />
                     ) : (
-                      <img src="/kite.svg" alt={p.name} className="w-14 h-14 opacity-50 z-10" />
+                      <img src={`${import.meta.env.BASE_URL}kite.svg`} alt={p.name} className="w-14 h-14 opacity-50 z-10" />
                     )}
 
                     <div className="absolute inset-0 bg-black/40 group-hover:opacity-100 opacity-0 transition-all flex items-center justify-center gap-2 z-20 backdrop-blur-[2px]">

@@ -21,7 +21,7 @@ function getBackdropCategory(name: string) {
 }
 
 function StagePanel() {
-  const { project, setBackdrop, addBackdrop, deleteBackdrop } = useEditorStore();
+  const { project, addBackdrop, deleteBackdrop } = useEditorStore();
   const [showPicker, setShowPicker] = useState(false);
   const [activeCategory, setActiveCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -34,14 +34,7 @@ function StagePanel() {
   });
 
   const handleChooseBuiltin = (backdrop: { name: string; dataUrl: string }) => {
-    const currentBackdrops = useEditorStore.getState().project.backdrops;
-    const existingIndex = currentBackdrops.findIndex((item) => item.dataUrl === backdrop.dataUrl);
-    if (existingIndex >= 0) {
-      setBackdrop(existingIndex);
-    } else {
-      addBackdrop(backdrop.name, backdrop.dataUrl);
-      setBackdrop(currentBackdrops.length);
-    }
+    addBackdrop(backdrop.name, backdrop.dataUrl);
     setShowPicker(false);
   };
 
@@ -50,9 +43,7 @@ function StagePanel() {
     if (!file) return;
     try {
       const dataUrl = await readFileAsDataURL(file);
-      const currentCount = useEditorStore.getState().project.backdrops.length;
       addBackdrop(file.name.replace(/\.[^.]+$/, ""), dataUrl);
-      setBackdrop(currentCount);
       setShowPicker(false);
     } catch {
       window.alert("This image could not be opened.");
@@ -65,7 +56,7 @@ function StagePanel() {
       <div className="flex items-center justify-between">
         <div className="min-w-0">
           <h2 className="truncate text-xs font-semibold text-gray-700">Backdrops</h2>
-          <p className="text-[10px] text-gray-400">{project.backdrops.length} total</p>
+          <p className="text-[10px] text-gray-400">1 active</p>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           <button
@@ -79,33 +70,29 @@ function StagePanel() {
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-1.5 overflow-x-hidden overflow-y-auto scrollbar-thin">
-        {project.backdrops.map((backdrop, index) => (
-          <div key={backdrop.id} className="group relative h-14 w-full shrink-0">
+        {project.backdrops[project.currentBackdrop] && (
+          <div key={project.backdrops[project.currentBackdrop].id} className="group relative h-14 w-full shrink-0">
             <button
-              className={`h-full w-full overflow-hidden rounded-lg border-2 transition-colors ${
-                project.currentBackdrop === index
-                  ? "border-kite-500"
-                  : "border-gray-200 hover:border-gray-400"
-              }`}
-              onClick={() => setBackdrop(index)}
-              title={backdrop.name}
-              aria-label={`Choose backdrop ${backdrop.name}`}
-              aria-pressed={project.currentBackdrop === index}
+              className="h-full w-full overflow-hidden rounded-lg border-2 border-kite-500 transition-colors"
+              onClick={() => setShowPicker(true)}
+              title={`Change backdrop: ${project.backdrops[project.currentBackdrop].name}`}
+              aria-label={`Change backdrop, currently ${project.backdrops[project.currentBackdrop].name}`}
+              aria-pressed={true}
             >
-              <img src={backdrop.dataUrl} alt="" className="h-full w-full object-cover" />
+              <img src={project.backdrops[project.currentBackdrop].dataUrl} alt="" className="h-full w-full object-cover" />
             </button>
             {project.backdrops.length > 1 && (
               <button
                 className="absolute right-0.5 top-0.5 hidden rounded bg-white/90 p-1 text-red-600 shadow group-hover:block focus:block"
-                onClick={() => deleteBackdrop(index)}
-                title={`Delete backdrop ${backdrop.name}`}
-                aria-label={`Delete backdrop ${backdrop.name}`}
+                onClick={() => deleteBackdrop(project.currentBackdrop)}
+                title={`Delete backdrop ${project.backdrops[project.currentBackdrop].name}`}
+                aria-label={`Delete backdrop ${project.backdrops[project.currentBackdrop].name}`}
               >
                 <Trash2 size={12} />
               </button>
             )}
           </div>
-        ))}
+        )}
         <button
           className="flex h-14 w-full shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-500 hover:border-kite-400 hover:text-kite-600"
           onClick={() => setShowPicker(true)}

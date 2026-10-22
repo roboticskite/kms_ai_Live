@@ -1,7 +1,7 @@
 import { memo,  useEffect, useRef, forwardRef, useImperativeHandle  } from "react";
 import * as Blockly from "blockly";
 import { defineAllBlocks } from "../blocks/blockDefinitions";
-import { buildToolboxJson, buildBeginnerToolboxJson, TOOLBOX_CATEGORIES } from "../blocks/toolbox";
+import { buildToolboxJson, buildBeginnerToolboxJson, buildSearchToolbox } from "../blocks/toolbox";
 import { ContinuousToolbox, ContinuousFlyout, ContinuousMetrics } from "@blockly/continuous-toolbox";
 import { useEditorStore } from "../store/editorStore";
 
@@ -37,6 +37,7 @@ export interface BlocklyWorkspaceHandle {
   selectCategory: (name: string) => void;
   undo: () => void;
   redo: () => void;
+  deleteSelected: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
 }
@@ -85,7 +86,9 @@ const BlocklyWorkspace = forwardRef<BlocklyWorkspaceHandle, Props>(({ beginnerMo
   const containerRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<Blockly.WorkspaceSvg | null>(null);
   const onWorkspaceChangeRef = useRef(onWorkspaceChange);
+  const activeCategoryRef = useRef(activeCategory);
   onWorkspaceChangeRef.current = onWorkspaceChange;
+  activeCategoryRef.current = activeCategory;
 
   useEffect(() => {
     if (!blocksDefined) {
@@ -199,27 +202,36 @@ const BlocklyWorkspace = forwardRef<BlocklyWorkspaceHandle, Props>(({ beginnerMo
   }, [beginnerMode]);
 
   useEffect(() => {
-    if (!searchQuery?.trim() || !workspaceRef.current) return;
-    const q = searchQuery.toLowerCase().trim();
-    for (const cat of TOOLBOX_CATEGORIES) {
-      const match = cat.name.toLowerCase().includes(q) || cat.blocks.some((b) => b.type.toLowerCase().includes(q));
-      if (match) {
-        onCategoryChange?.(cat.name);
-        try {
-          const tb = (workspaceRef.current as any).getToolbox?.();
-          const items: any[] = tb?.getToolboxItems?.() ?? [];
-          for (const item of items) {
-            const n = item.getName?.() ?? item.name_ ?? item.toolboxItemDef_?.name ?? "";
-            if (n.toLowerCase() === cat.name.toLowerCase()) {
-              tb.setSelectedItem?.(item);
-              break;
-            }
-          }
-        } catch {}
-        break;
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
+
+    const timer = window.setTimeout(() => {
+      if (workspaceRef.current !== workspace) return;
+
+      const toolbox = workspace.getToolbox() as any;
+      if (!toolbox) return;
+
+      toolbox.clearSelection();
+      if (searchQuery.trim()) {
+        const { toolbox: searchToolbox } = buildSearchToolbox(searchQuery, beginnerMode);
+        workspace.updateToolbox(searchToolbox);
+      } else {
+        workspace.updateToolbox(beginnerMode ? buildBeginnerToolboxJson() : buildToolboxJson());
       }
-    }
-  }, [searchQuery, onCategoryChange]);
+
+      toolbox.refreshSelection();
+      toolbox.getFlyout().recordScrollPositions();
+      if (!searchQuery.trim()) {
+        const items = toolbox.getToolboxItems();
+        const selectedCategory = items.find((item: any) =>
+          item.getName().toLowerCase() === activeCategoryRef.current.toLowerCase()
+        );
+        if (selectedCategory) toolbox.setSelectedItem(selectedCategory);
+      }
+    }, searchQuery.trim() ? 120 : 0);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, beginnerMode]);
 
   useImperativeHandle(ref, () => ({
     getWorkspace: () => workspaceRef.current,
@@ -269,6 +281,13 @@ const BlocklyWorkspace = forwardRef<BlocklyWorkspaceHandle, Props>(({ beginnerMo
     redo: () => {
       if (!workspaceRef.current) return;
       workspaceRef.current.undo(true);
+    },
+    deleteSelected: () => {
+      const workspace = workspaceRef.current;
+      const selection = Blockly.getSelected();
+      if (!workspace || !selection || selection.workspace !== workspace) return;
+      const selectedBlock = workspace.getBlockById(selection.id);
+      selectedBlock?.dispose(true);
     },
     canUndo: () => {
       if (!workspaceRef.current) return false;

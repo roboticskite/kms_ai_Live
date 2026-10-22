@@ -53,9 +53,6 @@ function CategorySidebar({
   return (
     <div
       style={{
-        width: 150,
-        minWidth: 150,
-        maxWidth: 150,
         background: "#f8fafc",
         borderRight: "1px solid #e2e8f0",
         display: "flex",
@@ -66,7 +63,7 @@ function CategorySidebar({
         paddingTop: 8,
         paddingBottom: 8,
       }}
-      className="scrollbar-thin"
+      className="w-[68px] min-w-[68px] max-w-[68px] overflow-y-auto scrollbar-thin lg:w-[150px] lg:min-w-[150px] lg:max-w-[150px]"
     >
       {SIDEBAR_CATEGORIES.map((cat) => {
         const isActive = activeCategory === cat.name;
@@ -105,6 +102,7 @@ function CategorySidebar({
           >
             {/* Colored circle icon */}
             <span
+              className="hidden lg:inline"
               style={{
                 width: 34,
                 height: 34,

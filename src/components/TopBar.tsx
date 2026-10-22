@@ -106,7 +106,7 @@ function TopBar({ onRun, onStop, onRestart, blocklyRef }: Props) {
       {/* Logo & Menu */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <img src="/KITE_Logo1.png" alt="Kite Robotics" className="w-8 h-8 rounded-lg" />
+          <img src={`${import.meta.env.BASE_URL}KITE_Logo1.png`} alt="Kite Robotics" className="w-8 h-8 rounded-lg" />
           <span className="font-bold text-lg text-kite-700 hidden sm:block">Kite Robotics</span>
         </div>
 

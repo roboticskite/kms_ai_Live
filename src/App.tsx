@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import * as Blockly from "blockly";
-import { Home, Minus, Palette, Plus, Search, Trash2, Eye, EyeOff, X, Variable as VarIcon } from "lucide-react";
+import { Home, Minus, Palette, Play, Plus, Search, Square, Trash2, Eye, EyeOff, X, Variable as VarIcon } from "lucide-react";
 import { useEditorStore } from "./store/editorStore";
 import { RuntimeEngine } from "./engine/runtime";
 import { initializeRuntimeState } from "./engine/spriteState";
@@ -65,6 +65,7 @@ export default function App() {
     deleteVariable,
     toggleVariableVisible,
     updateSpriteBlocks,
+    updateSprite,
   } = useEditorStore();
 
   const prevSpriteIdRef = useRef<string | null>(selectedSpriteId);
@@ -91,6 +92,12 @@ export default function App() {
       }
     }
   }, [selectedSpriteId, updateSpriteBlocks]);
+
+  useEffect(() => {
+    if (isRunning) return;
+    const state = initializeRuntimeState(project);
+    setRuntimeState((previous) => ({ ...previous, sprites: state.sprites, clones: [] }));
+  }, [project, isRunning]);
 
   const stateUpdateScheduledRef = useRef(false);
   const onStateChange = useCallback(() => {
@@ -206,6 +213,25 @@ export default function App() {
     }
   }, []);
 
+  const handleSpritePositionChange = useCallback((spriteId: string, x: number, y: number) => {
+    const runtimeSprite = engineRef.current?.ctx.sprites[spriteId];
+    if (runtimeSprite) {
+      runtimeSprite.x = x;
+      runtimeSprite.y = y;
+      engineRef.current?.ctx.onStateChange();
+      return;
+    }
+    setRuntimeState((previous) => {
+      const sprite = previous.sprites[spriteId];
+      if (!sprite) return previous;
+      return { ...previous, sprites: { ...previous.sprites, [spriteId]: { ...sprite, x, y } } };
+    });
+  }, []);
+
+  const handleSpritePositionCommit = useCallback((spriteId: string, x: number, y: number) => {
+    updateSprite(spriteId, { x, y });
+  }, [updateSprite]);
+
   const handleMouseMove = useCallback((x: number, y: number) => {
     engineRef.current?.handleMouseMove(x, y);
   }, []);
@@ -254,23 +280,69 @@ export default function App() {
         {/* Left panel - Category sidebar + Blockly workspace */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Top bar: search + variables */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-200 shrink-0">
-            <div className="relative flex-1 max-w-xs">
+          <div className="flex items-center gap-1 px-2 py-2 bg-white border-b border-gray-200 shrink-0">
+            <div className="relative min-w-0 flex-1 max-w-xs">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 id="blocks-search-input"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search blocks..."
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-kite-400"
+                className="w-full min-w-0 pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-kite-400"
               />
             </div>
             <button
-              className={`btn-ghost text-xs ${showVarPanel ? "bg-orange-100 text-orange-700" : ""}`}
+              className={`btn-ghost shrink-0 px-2 text-xs ${showVarPanel ? "bg-orange-100 text-orange-700" : ""}`}
               onClick={() => setShowVarPanel(!showVarPanel)}
             >
               <VarIcon size={14} /> Variables
             </button>
+            <div className="ml-auto flex shrink-0 items-center gap-0.5">
+              <button className="btn-ghost h-8 w-8 rounded-full p-0" onClick={handleResetView} title="Reset block workspace">
+                <Home size={15} />
+              </button>
+              <button className="btn-ghost h-8 w-8 rounded-full p-0" onClick={handleZoomIn} title="Zoom in">
+                <Plus size={15} />
+              </button>
+              <button className="btn-ghost h-8 w-8 rounded-full p-0" onClick={handleZoomOut} title="Zoom out">
+                <Minus size={15} />
+              </button>
+              <button className="btn-ghost h-8 w-8 rounded-full p-0" onClick={() => blocklyRef.current?.deleteSelected()} title="Delete selected block">
+                <Trash2 size={15} />
+              </button>
+              <div className="relative">
+                <button
+                  className="btn-ghost h-8 w-8 rounded-full p-0"
+                  onClick={() => setThemeMenuOpen((open) => !open)}
+                  title="Workspace theme"
+                  style={{ background: workspaceTheme === "dark" ? "#111827" : "#7c3aed", color: "white" }}
+                >
+                  <Palette size={14} />
+                </button>
+                {themeMenuOpen && (
+                  <div className="absolute right-0 top-9 z-30 w-28 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
+                    <button
+                      className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-gray-100"
+                      onClick={() => {
+                        setWorkspaceTheme("default");
+                        setThemeMenuOpen(false);
+                      }}
+                    >
+                      Default
+                    </button>
+                    <button
+                      className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-gray-100"
+                      onClick={() => {
+                        setWorkspaceTheme("dark");
+                        setThemeMenuOpen(false);
+                      }}
+                    >
+                      Dark
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Variables mini-panel */}
@@ -334,56 +406,7 @@ export default function App() {
               onSearchChange={setSearchQuery}
             />
             {/* Blockly workspace */}
-            <div className="flex-1 min-h-0 relative workspace-shell" data-theme={workspaceTheme}>
-              <div className="absolute right-4 top-4 z-20 flex flex-col items-center gap-2 rounded-full border border-gray-200 bg-white/90 p-1.5 shadow-lg backdrop-blur-sm">
-                <button className="btn-ghost h-8 w-8 rounded-full p-0" onClick={handleResetView} title="Reset view">
-                  <Home size={16} />
-                </button>
-                <button className="btn-ghost h-8 w-8 rounded-full p-0" onClick={handleZoomIn} title="Zoom in">
-                  <Plus size={16} />
-                </button>
-                <button className="btn-ghost h-8 w-8 rounded-full p-0" onClick={handleZoomOut} title="Zoom out">
-                  <Minus size={16} />
-                </button>
-
-                <div className="relative">
-                  <button
-                    className="btn-ghost h-8 w-8 rounded-full p-0"
-                    onClick={() => setThemeMenuOpen((v) => !v)}
-                    title="Workspace theme"
-                    style={{
-                      background: workspaceTheme === "dark" ? "#111827" : "#7c3aed",
-                      color: "white",
-                    }}
-                  >
-                    <Palette size={15} />
-                  </button>
-
-                  {themeMenuOpen && (
-                    <div className="absolute right-0 top-10 w-28 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
-                      <button
-                        className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-gray-100"
-                        onClick={() => {
-                          setWorkspaceTheme("default");
-                          setThemeMenuOpen(false);
-                        }}
-                      >
-                        Default
-                      </button>
-                      <button
-                        className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs hover:bg-gray-100"
-                        onClick={() => {
-                          setWorkspaceTheme("dark");
-                          setThemeMenuOpen(false);
-                        }}
-                      >
-                        Dark
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
+            <div className="flex flex-1 min-h-0 flex-col relative workspace-shell" data-theme={workspaceTheme}>
               <BlocklyWorkspace
                 ref={blocklyRef}
                 beginnerMode={isBeginnerMode}
@@ -397,18 +420,19 @@ export default function App() {
 
         {/* Right panel - Stage */}
         <div
-          className={`flex flex-col bg-white border-l border-gray-200 shrink-0 ${fullscreen ? "fixed inset-0 z-50 bg-black" : ""}`}
-          style={{
-            width: fullscreen ? "100%" : "440px",
-            minWidth: fullscreen ? "100%" : "440px",
-            maxWidth: fullscreen ? "100%" : "440px",
-          }}
+          className={`flex flex-col bg-white border-l border-gray-200 shrink-0 ${
+            fullscreen
+              ? "fixed inset-0 z-50 w-full min-w-full max-w-full bg-black"
+              : "w-[clamp(320px,30vw,440px)] min-w-[320px] max-w-[440px]"
+          }`}
         >
           <div className={`relative flex-1 flex items-center justify-center ${fullscreen ? "min-h-0 bg-black p-0" : "min-h-0 overflow-hidden bg-gray-100 p-2"}`}>
             <StageCanvas
               project={project}
               runtimeState={isRunning ? runtimeState : { ...runtimeState, backdrop: project.currentBackdrop }}
               onSpriteClick={handleSpriteClick}
+              onSpritePositionChange={handleSpritePositionChange}
+              onSpritePositionCommit={handleSpritePositionCommit}
               onMouseMove={handleMouseMove}
               onMouseDown={handleMouseDown}
               onMouseUp={handleMouseUp}
@@ -421,14 +445,27 @@ export default function App() {
               onAnswerSubmit={handleAnswerSubmit}
             />
             {fullscreen && (
-              <button
-                className="absolute right-5 top-5 z-[60] flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-700 shadow-lg hover:bg-gray-100"
-                onClick={toggleFullscreen}
-                title="Exit fullscreen"
-                aria-label="Exit fullscreen"
-              >
-                <X size={20} />
-              </button>
+              <div className="absolute right-5 top-5 z-[60] flex items-center gap-2">
+                <button
+                  className={`flex h-10 items-center gap-2 rounded-full px-4 font-semibold text-white shadow-lg transition-colors ${
+                    isRunning ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"
+                  }`}
+                  onClick={isRunning ? handleStop : handleRun}
+                  title={isRunning ? "Stop" : "Run"}
+                  aria-label={isRunning ? "Stop" : "Run"}
+                >
+                  {isRunning ? <Square size={15} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+                  {isRunning ? "Stop" : "Run"}
+                </button>
+                <button
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-700 shadow-lg hover:bg-gray-100"
+                  onClick={toggleFullscreen}
+                  title="Exit fullscreen"
+                  aria-label="Exit fullscreen"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             )}
           </div>
           {!fullscreen && (

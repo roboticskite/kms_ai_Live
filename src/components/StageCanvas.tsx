@@ -14,6 +14,8 @@ interface Props {
     asking: string | null;
   };
   onSpriteClick: (spriteId: string) => void;
+  onSpritePositionChange: (spriteId: string, x: number, y: number) => void;
+  onSpritePositionCommit: (spriteId: string, x: number, y: number) => void;
   onMouseMove: (x: number, y: number) => void;
   onMouseDown: () => void;
   onMouseUp: () => void;
@@ -28,6 +30,8 @@ export default function StageCanvas({
   project,
   runtimeState,
   onSpriteClick,
+  onSpritePositionChange,
+  onSpritePositionCommit,
   onMouseMove,
   onMouseDown,
   onMouseUp,
@@ -41,11 +45,23 @@ export default function StageCanvas({
   const penCanvasRef = useRef<HTMLCanvasElement>(null);
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const backdropCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const drawRef = useRef<() => void>(() => {});
+  const dragRef = useRef<{
+    spriteId: string;
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+    startClientX: number;
+    startClientY: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
   const [answerInput, setAnswerInput] = useState("");
 
   const loadImage = useCallback((dataUrl: string, cache: Map<string, HTMLImageElement>): HTMLImageElement => {
     if (cache.has(dataUrl)) return cache.get(dataUrl)!;
     const img = new Image();
+    img.onload = () => drawRef.current();
     img.src = dataUrl;
     cache.set(dataUrl, img);
     return img;
@@ -67,7 +83,10 @@ export default function StageCanvas({
     if (backdrop) {
       const img = loadImage(backdrop.dataUrl, backdropCacheRef.current);
       if (img.complete && img.naturalWidth > 0) {
-        ctx.drawImage(img, 0, 0, W, H);
+        const scale = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+        const drawW = img.naturalWidth * scale;
+        const drawH = img.naturalHeight * scale;
+        ctx.drawImage(img, (W - drawW) / 2, (H - drawH) / 2, drawW, drawH);
       } else {
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, W, H);
@@ -186,6 +205,8 @@ export default function StageCanvas({
     }
   }, [project, runtimeState, loadImage, visibleVariables]);
 
+  drawRef.current = draw;
+
   useEffect(() => {
     draw();
   }, [draw, runtimeState]);
@@ -203,6 +224,10 @@ export default function StageCanvas({
   }, [stageSize, onMountPenCanvas]);
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -230,13 +255,74 @@ export default function StageCanvas({
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const getStageCoordinates = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (canvas.width / rect.width) - canvas.width / 2;
-    const y = canvas.height / 2 - (e.clientY - rect.top) * (canvas.height / rect.height);
-    onMouseMove(x, y);
+    return {
+      x: ((clientX - rect.left) / rect.width) * canvas.width - canvas.width / 2,
+      y: canvas.height / 2 - ((clientY - rect.top) / rect.height) * canvas.height,
+    };
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    onMouseDown();
+    const canvas = canvasRef.current;
+    const point = getStageCoordinates(e.clientX, e.clientY);
+    if (!canvas || !point) return;
+
+    const sprites = Object.values(runtimeState.sprites).slice().sort((a, b) => b.layerOrder - a.layerOrder);
+    for (const sprite of sprites) {
+      if (!sprite.visible) continue;
+      const costume = sprite.costumes[sprite.costumeIndex];
+      if (!costume) continue;
+      const scale = sprite.size / 100;
+      const drawW = (costume.width || 80) * scale;
+      const drawH = (costume.height || 80) * scale;
+      if (Math.abs(point.x - sprite.x) >= drawW / 2 || Math.abs(point.y - sprite.y) >= drawH / 2) continue;
+
+      dragRef.current = {
+        spriteId: sprite.id,
+        pointerId: e.pointerId,
+        offsetX: sprite.x - point.x,
+        offsetY: sprite.y - point.y,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        moved: false,
+      };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      break;
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const point = getStageCoordinates(e.clientX, e.clientY);
+    if (point) onMouseMove(point.x, point.y);
+
+    const drag = dragRef.current;
+    const canvas = canvasRef.current;
+    if (!drag || drag.pointerId !== e.pointerId || !point || !canvas) return;
+
+    if (Math.hypot(e.clientX - drag.startClientX, e.clientY - drag.startClientY) > 4) {
+      drag.moved = true;
+    }
+    const x = Math.max(-canvas.width / 2, Math.min(canvas.width / 2, point.x + drag.offsetX));
+    const y = Math.max(-canvas.height / 2, Math.min(canvas.height / 2, point.y + drag.offsetY));
+    onSpritePositionChange(drag.spriteId, x, y);
+  };
+
+  const finishPointer = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    onMouseUp();
+    const drag = dragRef.current;
+    const point = getStageCoordinates(e.clientX, e.clientY);
+    const canvas = canvasRef.current;
+    if (drag && drag.pointerId === e.pointerId && point && canvas && drag.moved) {
+      const x = Math.max(-canvas.width / 2, Math.min(canvas.width / 2, point.x + drag.offsetX));
+      const y = Math.max(-canvas.height / 2, Math.min(canvas.height / 2, point.y + drag.offsetY));
+      onSpritePositionCommit(drag.spriteId, x, y);
+      suppressClickRef.current = true;
+    }
+    dragRef.current = null;
   };
 
   return (
@@ -246,11 +332,18 @@ export default function StageCanvas({
         width={stageSize.width}
         height={stageSize.height}
         onClick={handleClick}
-        onMouseMove={handleMouseMove}
-        onMouseDown={onMouseDown}
-        onMouseUp={onMouseUp}
-        style={fullscreen ? undefined : { maxHeight: "340px", aspectRatio: `${stageSize.width}/${stageSize.height}` }}
-        className={`rounded-xl shadow-md border border-gray-200 bg-white cursor-pointer ${
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishPointer}
+        onPointerCancel={finishPointer}
+        style={{
+          width: fullscreen ? "min(100%, 133.333vh)" : undefined,
+          height: fullscreen ? "min(100%, 75vw)" : undefined,
+          maxHeight: "100%",
+          aspectRatio: `${stageSize.width}/${stageSize.height}`,
+          touchAction: "none",
+        }}
+        className={`rounded-xl shadow-md border border-gray-200 bg-white cursor-grab active:cursor-grabbing ${
           fullscreen ? "max-h-full max-w-full object-contain" : "max-w-full h-auto object-contain"
         }`}
       />

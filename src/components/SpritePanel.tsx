@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useEditorStore } from "../store/editorStore";
 import { getBuiltinSprites, readFileAsDataURL } from "../utils/helpers";
-import { memo,  useMemo, useRef, useState  } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 const SPRITE_CATEGORY_GROUPS = {
   Animals: ["Cat", "Bird", "Fish", "Butterfly", "Dinosaur", "Dog", "Rabbit", "Panda", "Tiger", "Bear", "Frog", "Penguin", "Turtle", "Owl", "Lion", "Monkey", "Elephant", "Giraffe", "Snake", "Octopus"],
@@ -251,6 +251,31 @@ function SpriteProperties({
   const { project } = useEditorStore();
   const [openControl, setOpenControl] = useState<string | null>(null);
   const sprite = project.sprites.find((s) => s.id === spriteId);
+
+  useEffect(() => {
+    if (!openControl) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      const activeControl = target instanceof Element
+        ? target.closest("[data-property-control]")?.getAttribute("data-property-control")
+        : null;
+      if (activeControl !== openControl) {
+        setOpenControl(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenControl(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openControl]);
+
   if (!sprite) return null;
 
   const controls = [
@@ -287,7 +312,7 @@ function SpriteProperties({
       </div>
 
       {controls.map(({ key, label, icon: Icon, min, max }) => (
-        <div key={key} className="relative">
+        <div key={key} className="relative" data-property-control={key}>
           <button
             className="flex h-8 w-full min-w-0 items-center justify-between gap-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-white px-2.5 text-xs hover:border-kite-400 transition-colors shadow-2xs"
             onClick={() => setOpenControl((current) => current === key ? null : key)}

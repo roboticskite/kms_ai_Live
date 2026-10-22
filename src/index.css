@@ -130,6 +130,13 @@
 .blocklyWsDrag {
   cursor: grab;
 }
+.blocklyDraggable {
+  cursor: grab;
+  touch-action: none;
+}
+.blocklyDraggable:active {
+  cursor: grabbing;
+}
 /* Ensure flyout scrollbar is always visible */
 .blocklyFlyoutScrollbar,
 .blocklyFlyoutScrollbar .blocklyScrollbarBackground,

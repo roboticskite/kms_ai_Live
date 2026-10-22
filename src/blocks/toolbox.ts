@@ -241,3 +241,50 @@ export function buildSingleCategoryToolbox(categoryName: string, beginnerMode: b
     contents: cat.blocks.map(b => ({ kind: "block", type: b.type }))
   };
 }
+
+const BLOCK_SEARCH_TEXT = new Map<string, string>();
+
+export function buildSearchToolbox(query: string, beginnerMode: boolean = false): {
+  toolbox: any;
+  firstCategory: string | null;
+} {
+  const normalizedQuery = query.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+  const beginnerCategories = ["Motion", "Looks", "Events", "Control", "Sound", "Game"];
+  let searchWorkspace: Blockly.Workspace | null = null;
+
+  for (const category of TOOLBOX_CATEGORIES) {
+    for (const { type } of category.blocks) {
+      if (BLOCK_SEARCH_TEXT.has(type)) continue;
+      searchWorkspace ??= new Blockly.Workspace();
+      const block = searchWorkspace.newBlock(type);
+      BLOCK_SEARCH_TEXT.set(
+        type,
+        `${type} ${block.toString(1000)} ${block.getTooltip()}`.toLowerCase().replace(/\s+/g, " ")
+      );
+      block.dispose(false);
+    }
+  }
+  searchWorkspace?.dispose();
+
+  const contents = TOOLBOX_CATEGORIES.flatMap((category) => {
+    if (beginnerMode && !beginnerCategories.includes(category.name)) return [];
+
+    const matchingBlocks = category.blocks.filter(({ type }) =>
+      BLOCK_SEARCH_TEXT.get(type)?.includes(normalizedQuery)
+    );
+
+    return matchingBlocks.length
+      ? [{
+          kind: "category",
+          name: category.name,
+          colour: category.colour,
+          contents: matchingBlocks.map(({ type }) => ({ kind: "block", type })),
+        }]
+      : [];
+  });
+
+  return {
+    toolbox: { kind: "categoryToolbox", contents },
+    firstCategory: contents[0]?.name ?? null,
+  };
+}

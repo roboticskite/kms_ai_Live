@@ -339,7 +339,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       rotationStyle: "all-around",
       layerOrder: project.sprites.length,
       variables: {},
-      blocks: DEFAULT_STARTER_XML,
+      blocks: "",
       volume: 100,
       effects: { color: 0, brightness: 0, ghost: 0 },
     };
@@ -416,7 +416,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const project = get().project;
     const updated = {
       ...project,
-      backdrops: [...project.backdrops, { id: generateId("backdrop"), name, dataUrl }],
+      backdrops: [{ id: generateId("backdrop"), name, dataUrl }],
+      currentBackdrop: 0,
       updatedAt: Date.now(),
     };
     saveCurrent(updated);
